@@ -1,0 +1,22 @@
+# Node modules
+node_modules/
+frontend/node_modules/
+
+# React build
+dist/
+frontend/frontend/dist/
+
+# Spring Boot build
+student-internship-tracker/target/
+
+# Config sensible
+student-internship-tracker/src/main/resources/application.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
