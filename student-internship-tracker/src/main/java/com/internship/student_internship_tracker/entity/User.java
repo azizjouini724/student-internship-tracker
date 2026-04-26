@@ -1,5 +1,7 @@
 package com.internship.student_internship_tracker.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -16,6 +18,7 @@ public class User {
 
     private String nom;
     private String email;
+    @JsonIgnore
     private String motDePasse;
 
     @Enumerated(EnumType.STRING)
