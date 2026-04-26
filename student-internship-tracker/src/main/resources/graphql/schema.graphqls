@@ -1,0 +1,58 @@
+type Query {
+    rapports: [Rapport]
+    rapportById(id: ID!): Rapport
+    mesRapports(auteurId: ID!): [Rapport]
+    users: [User]
+    userById(id: ID!): User
+    commentairesByRapport(rapportId: ID!): [Commentaire]
+    deadlines: [Deadline]
+    mesNotifications(userId: ID!): [Notification]
+}
+
+type Mutation {
+    createRapport(titre: String!, contenu: String!, auteurId: ID!, encadrantId: ID!): Rapport
+    validerRapport(id: ID!, statut: String!): Rapport
+    addCommentaire(contenu: String!, rapportId: ID!, auteurId: ID!): Commentaire
+    createDeadline(type: String!, dateLimite: String!): Deadline
+}
+
+type User {
+    id: ID!
+    nom: String
+    email: String
+    role: String
+}
+
+type Rapport {
+    id: ID!
+    titre: String
+    contenu: String
+    statut: String
+    dateDepot: String
+    auteur: User
+    encadrant: User
+    commentaires: [Commentaire]
+}
+
+type Commentaire {
+    id: ID!
+    contenu: String
+    dateCreation: String
+    auteur: User
+    rapport: Rapport
+}
+
+type Deadline {
+    id: ID!
+    type: String
+    dateLimite: String
+}
+
+type Notification {
+    id: ID!
+    titre: String
+    message: String
+    estLue: Boolean
+    dateEnvoi: String
+    user: User
+}

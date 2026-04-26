@@ -1,4 +1,4 @@
-package com.internship.student_internship_tracker.service;
+package com.internship.student_internship_tracker.graphql;
 
 import com.internship.student_internship_tracker.service.AuthService;
 import lombok.RequiredArgsConstructor;

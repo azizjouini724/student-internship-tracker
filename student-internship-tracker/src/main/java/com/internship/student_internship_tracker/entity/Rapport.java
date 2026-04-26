@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 @Entity
 @Table(name = "rapports")
 @Data
@@ -20,11 +22,11 @@ public class Rapport {
     private String statut; // BROUILLON, SOUMIS, VALIDE, REJETE
 
     private LocalDateTime dateDepot;
-
+    @JsonIgnore 
     @ManyToOne
     @JoinColumn(name = "auteur_id")
     private User auteur;
-
+    @JsonIgnore 
     @ManyToOne
     @JoinColumn(name = "encadrant_id")
     private User encadrant;
