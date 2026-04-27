@@ -12,11 +12,15 @@
   "dependencies": {
     "@apollo/client": "^4.1.9",
     "axios": "^1.15.2",
+    "framer-motion": "^12.38.0",
     "graphql": "^16.13.2",
     "lucide-react": "^1.11.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-router-dom": "^7.14.2"
+    "react-router-dom": "^7.14.2",
+    "recharts": "^3.8.1",
+    "sonner": "^2.0.7",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
