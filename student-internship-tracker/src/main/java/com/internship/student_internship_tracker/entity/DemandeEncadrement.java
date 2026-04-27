@@ -1,30 +1,33 @@
 package com.internship.student_internship_tracker.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(name = "demandes_encadrement")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class User {
+public class DemandeEncadrement {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String nom;
-    private String email;
-    @JsonIgnore
-    private String motDePasse;
-
     @Enumerated(EnumType.STRING)
-    private Role role;
+    private StatutDemande statut;
+
+    private String message;
+    private LocalDateTime dateDemande;
+    private LocalDateTime dateReponse;
+
+    @ManyToOne
+    @JoinColumn(name = "etudiant_id")
+    private User etudiant;
+
     @ManyToOne
     @JoinColumn(name = "encadrant_id")
-    @JsonIgnore
     private User encadrant;
 }
