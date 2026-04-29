@@ -21,7 +21,8 @@ export default function LoginPage() {
   setLoading(true)
   try {
     const data = await authService.login(form.email, form.password)
-    setAuth(data.token, data.role, form.email)
+    setAuth(data.token, data.role, data.nom)
+    localStorage.setItem('userId', String(data.id))
     toast.success('Connexion réussie !')
     setTimeout(() => {
       if (data.role === 'ETUDIANT') navigate('/student')

@@ -5,6 +5,8 @@ import {
   Settings, HelpCircle, Moon, Sun, LogOut,
   Plus, TrendingUp, Target, Clock, Award
 } from 'lucide-react'
+import { X, Send, UserCheck } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie,
@@ -16,6 +18,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
 import api from '../services/api'
 
+
 const COLORS = ['#142588', '#006c48', '#ef4444', '#f59e0b']
 
 export default function StudentDashboard() {
@@ -24,8 +27,18 @@ export default function StudentDashboard() {
   const navigate = useNavigate()
   const [rapports, setRapports] = useState<any[]>([])
   const [activeNav, setActiveNav] = useState('Dashboard')
+  const [showDemandeModal, setShowDemandeModal] = useState(false)
+  const [encadrants, setEncadrants] = useState<any[]>([])
+  const [selectedEncadrant, setSelectedEncadrant] = useState<any>(null)
+  const [messageDemande, setMessageDemande] = useState('')
+  const [demandes, setDemandes] = useState<any[]>([])
+  const [loadingDemande, setLoadingDemande] = useState(false)
 
-  useEffect(() => { fetchRapports() }, [])
+  useEffect(() => {
+  fetchRapports()
+  fetchEncadrants()
+  fetchDemandes()
+}, [])
 
   const fetchRapports = async () => {
     try {
@@ -35,6 +48,54 @@ export default function StudentDashboard() {
       toast.error('Erreur de chargement')
     }
   }
+  const fetchEncadrants = async () => {
+  try {
+    const res = await api.get('/users')
+    setEncadrants(res.data.filter((u: any) => u.role === 'ENCADRANT'))
+  } catch {
+    toast.error('Erreur chargement encadrants')
+  }
+}
+
+const fetchDemandes = async () => {
+  try {
+    const userId = localStorage.getItem('userId')
+    if (!userId) return
+    const res = await api.get(`/demandes/etudiant/${userId}`)
+    setDemandes(res.data)
+  } catch {
+    console.error('Erreur demandes')
+  }
+}
+
+const soumettreDemande = async () => {
+  if (!selectedEncadrant) {
+    toast.error('Sélectionnez un encadrant')
+    return
+  }
+  if (!messageDemande.trim()) {
+    toast.error('Écrivez un message')
+    return
+  }
+  setLoadingDemande(true)
+  try {
+    const userId = localStorage.getItem('userId')
+    await api.post('/demandes', {
+      etudiantId: userId,
+      encadrantId: selectedEncadrant.id,
+      message: messageDemande
+    })
+    toast.success('Demande envoyée à ' + selectedEncadrant.nom + ' !')
+    setShowDemandeModal(false)
+    setMessageDemande('')
+    setSelectedEncadrant(null)
+    fetchDemandes()
+  } catch (error: any) {
+    toast.error(error.response?.data?.error || 'Erreur envoi demande')
+  } finally {
+    setLoadingDemande(false)
+  }
+}
 
   const total = rapports.length
   const soumis = rapports.filter(r => r.statut === 'SOUMIS').length
@@ -185,13 +246,24 @@ export default function StudentDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            <motion.button
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium shadow-lg shadow-primary/20"
-              style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
-            >
-              <Plus className="w-4 h-4" />NEW SUBMISSION
-            </motion.button>
+            <div className="flex items-center gap-2">
+              <motion.button
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={() => setShowDemandeModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium shadow-lg shadow-primary/20"
+                style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
+              >
+                <UserCheck className="w-4 h-4" />DEMANDER ENCADRANT
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium"
+                style={{ background: 'linear-gradient(135deg, #006c48, #059669)' }}
+              >
+                <Plus className="w-4 h-4" />NEW SUBMISSION
+              </motion.button>
+            </div>
 
             <motion.button whileTap={{ scale: 0.9 }} onClick={toggleTheme}
               className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
@@ -326,6 +398,55 @@ export default function StudentDashboard() {
               )}
             </motion.div>
           </div>
+          {/* DEMANDES STATUS */}
+{demandes.length > 0 && (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+    transition={{ delay: 0.45 }}
+    className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm mb-8"
+  >
+    <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
+      Mes Demandes d'Encadrement
+    </h3>
+    <div className="flex flex-col gap-3">
+      {demandes.map((demande, i) => (
+        <motion.div
+          key={demande.id}
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: i * 0.08 }}
+          className="flex items-center justify-between p-4 rounded-xl bg-blue-50/50 dark:bg-gray-800"
+          style={{ borderLeft: '3px solid #142588' }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <UserCheck className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-800 dark:text-white">
+                {demande.encadrant?.nom}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
+                {new Date(demande.dateDemande).toLocaleDateString('fr-FR')}
+              </p>
+            </div>
+          </div>
+          <span className={`text-xs font-medium px-3 py-1 rounded-full ${
+            demande.statut === 'ACCEPTE'
+              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+              : demande.statut === 'REFUSE'
+              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+          }`}>
+            {demande.statut === 'ACCEPTE' ? '✅ Acceptée' 
+              : demande.statut === 'REFUSE' ? '❌ Refusée' 
+              : '⏳ En attente'}
+          </span>
+        </motion.div>
+      ))}
+    </div>
+  </motion.div>
+)}
 
           {/* RECENT REPORTS */}
           <motion.div
@@ -386,6 +507,127 @@ export default function StudentDashboard() {
           </motion.div>
         </div>
       </main>
+      {/* MODAL DEMANDE ENCADRANT */}
+<AnimatePresence>
+  {showDemandeModal && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}
+      onClick={() => setShowDemandeModal(false)}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        transition={{ type: 'spring', damping: 25 }}
+        className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="font-bold text-gray-900 dark:text-white text-lg">
+              Demander un Encadrant
+            </h3>
+            <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
+              Choisissez votre encadrant de stage
+            </p>
+          </div>
+          <button
+            onClick={() => setShowDemandeModal(false)}
+            className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Encadrants list */}
+        <div className="mb-4">
+          <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
+            Choisir un encadrant
+          </label>
+          <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+            {encadrants.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">
+                Aucun encadrant disponible
+              </p>
+            ) : (
+              encadrants.map(enc => (
+                <motion.button
+                  key={enc.id}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setSelectedEncadrant(enc)}
+                  className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all ${
+                    selectedEncadrant?.id === enc.id
+                      ? 'bg-primary text-white'
+                      : 'bg-blue-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-blue-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
+                    selectedEncadrant?.id === enc.id
+                      ? 'bg-white/20 text-white'
+                      : 'bg-primary/10 text-primary'
+                  }`}>
+                    {enc.nom?.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{enc.nom}</p>
+                    <p className={`text-xs ${selectedEncadrant?.id === enc.id ? 'text-white/70' : 'text-gray-400'}`}>
+                      {enc.email}
+                    </p>
+                  </div>
+                  {selectedEncadrant?.id === enc.id && (
+                    <UserCheck className="w-4 h-4 ml-auto" />
+                  )}
+                </motion.button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Message */}
+        <div className="mb-6">
+          <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
+            Message
+          </label>
+          <textarea
+            value={messageDemande}
+            onChange={e => setMessageDemande(e.target.value)}
+            placeholder="Bonjour, je souhaite être encadré par vous..."
+            rows={3}
+            className="w-full bg-blue-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-primary outline-none text-sm transition-all resize-none"
+          />
+        </div>
+
+        {/* Submit */}
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={soumettreDemande}
+          disabled={loadingDemande}
+          className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
+          style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
+        >
+          {loadingDemande ? (
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+              className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+            />
+          ) : (
+            <>
+              <Send className="w-4 h-4" />
+              ENVOYER LA DEMANDE
+            </>
+          )}
+        </motion.button>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
     </div>
   )
 }
