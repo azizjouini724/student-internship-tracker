@@ -45,10 +45,10 @@ public ResponseEntity<?> login(@RequestBody Map<String, String> body) {
         String token = authService.login(email, body.get("password"));
         User user = userRepository.findByEmail(email).orElseThrow();
        return ResponseEntity.ok(Map.of(
-    "token", token,
-    "role", user.getRole().name(),
-    "nom", user.getNom(),
-    "id", user.getId()
+        "token", token,
+        "role", user.getRole().name(),
+        "nom", user.getNom(),
+        "id", user.getId()
 ));
     } catch (Exception e) {
         return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

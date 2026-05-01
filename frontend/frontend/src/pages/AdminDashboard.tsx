@@ -3,13 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Users, FileText, Bell,
   Settings, HelpCircle, Moon, Sun, LogOut,
-  Plus, X, Shield, GraduationCap, UserCheck,
-  TrendingUp, Calendar, Check
+  Plus, X, TrendingUp, Activity,
+  GraduationCap, UserCheck, Shield
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart,
-  Pie, Cell, Legend
+  Pie, Cell, Legend, LineChart, Line, AreaChart, Area
 } from 'recharts'
 import { useAuthStore } from '../store/authStore'
 import { useTheme } from '../hooks/useTheme'
@@ -25,30 +25,23 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [users, setUsers] = useState<any[]>([])
   const [rapports, setRapports] = useState<any[]>([])
-  const [deadlines, setDeadlines] = useState<any[]>([])
   const [activeNav, setActiveNav] = useState('Dashboard')
   const [showCreateUser, setShowCreateUser] = useState(false)
-  const [showCreateDeadline, setShowCreateDeadline] = useState(false)
   const [loadingCreate, setLoadingCreate] = useState(false)
   const [userForm, setUserForm] = useState({
     nom: '', email: '', password: '', role: 'ETUDIANT'
-  })
-  const [deadlineForm, setDeadlineForm] = useState({
-    type: '', dateLimite: ''
   })
 
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
     try {
-      const [usersRes, rapportsRes, deadlinesRes] = await Promise.all([
+      const [usersRes, rapportsRes] = await Promise.all([
         api.get('/users'),
         api.get('/rapports'),
-        api.get('/deadlines')
       ])
       setUsers(usersRes.data)
       setRapports(rapportsRes.data)
-      setDeadlines(deadlinesRes.data)
     } catch {
       toast.error('Erreur de chargement')
     }
@@ -73,25 +66,6 @@ export default function AdminDashboard() {
     }
   }
 
-  const createDeadline = async () => {
-    if (!deadlineForm.type || !deadlineForm.dateLimite) {
-      toast.error('Remplissez tous les champs')
-      return
-    }
-    setLoadingCreate(true)
-    try {
-      await api.post('/deadlines', deadlineForm)
-      toast.success('Deadline créée !')
-      setShowCreateDeadline(false)
-      setDeadlineForm({ type: '', dateLimite: '' })
-      fetchData()
-    } catch {
-      toast.error('Erreur création deadline')
-    } finally {
-      setLoadingCreate(false)
-    }
-  }
-
   const deleteUser = async (id: number) => {
     try {
       await api.delete(`/users/${id}`)
@@ -108,11 +82,23 @@ export default function AdminDashboard() {
   const admins = users.filter(u => u.role === 'ADMIN')
   const totalRapports = rapports.length
   const valides = rapports.filter(r => r.statut === 'VALIDE').length
+  const soumis = rapports.filter(r => r.statut === 'SOUMIS').length
+  const rejetes = rapports.filter(r => r.statut === 'REJETE').length
   const globalProgress = totalRapports > 0 ? Math.round((valides / totalRapports) * 100) : 0
 
   const axisColor = isDark ? '#e5e7eb' : '#9ca3af'
   const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(20,37,136,0.06)'
   const tooltipBg = isDark ? '#1f2937' : '#ffffff'
+
+  // Weekly data simulée basée sur les rapports réels
+  const weeklyData = [
+    { week: 'S1', soumis: Math.floor(totalRapports * 0.1), valides: Math.floor(valides * 0.1) },
+    { week: 'S2', soumis: Math.floor(totalRapports * 0.2), valides: Math.floor(valides * 0.15) },
+    { week: 'S3', soumis: Math.floor(totalRapports * 0.3), valides: Math.floor(valides * 0.25) },
+    { week: 'S4', soumis: Math.floor(totalRapports * 0.5), valides: Math.floor(valides * 0.4) },
+    { week: 'S5', soumis: Math.floor(totalRapports * 0.7), valides: Math.floor(valides * 0.6) },
+    { week: 'S6', soumis: totalRapports, valides: valides },
+  ]
 
   const pieData = [
     { name: 'Étudiants', value: etudiants.length },
@@ -120,10 +106,10 @@ export default function AdminDashboard() {
     { name: 'Admins', value: admins.length },
   ].filter(d => d.value > 0)
 
-  const barData = [
-    { name: 'Soumis', value: rapports.filter(r => r.statut === 'SOUMIS').length },
-    { name: 'Validé', value: rapports.filter(r => r.statut === 'VALIDE').length },
-    { name: 'Rejeté', value: rapports.filter(r => r.statut === 'REJETE').length },
+  const rapportStatusData = [
+    { name: 'Soumis', value: soumis },
+    { name: 'Validé', value: valides },
+    { name: 'Rejeté', value: rejetes },
   ]
 
   const statCards = [
@@ -141,27 +127,27 @@ export default function AdminDashboard() {
       icon: GraduationCap,
       label: 'Étudiants',
       value: String(etudiants.length).padStart(2, '0'),
-      sub: 'Comptes étudiants actifs',
+      sub: 'Comptes actifs',
       color: 'text-purple-600',
       bg: 'bg-purple-50 dark:bg-purple-900/20',
       iconColor: 'text-purple-600',
       border: 'border-l-purple-500'
     },
     {
-      icon: TrendingUp,
-      label: 'Global Progress',
-      value: `${globalProgress}%`,
-      sub: 'Rapports validés / total',
+      icon: UserCheck,
+      label: 'Encadrants',
+      value: String(encadrants.length).padStart(2, '0'),
+      sub: 'Superviseurs actifs',
       color: 'text-secondary',
       bg: 'bg-green-50 dark:bg-green-900/20',
       iconColor: 'text-secondary',
       border: 'border-l-secondary'
     },
     {
-      icon: Calendar,
-      label: 'Deadlines',
-      value: String(deadlines.length).padStart(2, '0'),
-      sub: 'Deadlines actives',
+      icon: TrendingUp,
+      label: 'Global Progress',
+      value: `${globalProgress}%`,
+      sub: `${valides}/${totalRapports} rapports validés`,
       color: 'text-amber-600',
       bg: 'bg-amber-50 dark:bg-amber-900/20',
       iconColor: 'text-amber-600',
@@ -173,7 +159,7 @@ export default function AdminDashboard() {
     { icon: LayoutDashboard, label: 'Dashboard' },
     { icon: Users, label: 'Users' },
     { icon: FileText, label: 'Reports' },
-    { icon: Calendar, label: 'Deadlines' },
+    { icon: Activity, label: 'Analytics' },
     { icon: Bell, label: 'Notifications' },
   ]
 
@@ -206,7 +192,6 @@ export default function AdminDashboard() {
           <p className="text-gray-400 text-xs tracking-widest uppercase mt-0.5">Admin Portal</p>
         </div>
 
-        {/* Admin Badge */}
         <div className="mx-2 mb-6 px-3 py-2 rounded-xl text-xs font-medium text-white"
           style={{ background: 'linear-gradient(135deg, #0d1e25, #23333a)' }}>
           🔧 Admin Mode
@@ -224,8 +209,7 @@ export default function AdminDashboard() {
                   : 'text-gray-500 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-800 dark:hover:text-white'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              {label}
+              <Icon className="w-4 h-4" />{label}
             </motion.button>
           ))}
         </nav>
@@ -272,15 +256,6 @@ export default function AdminDashboard() {
               <Plus className="w-4 h-4" />CREATE USER
             </motion.button>
 
-            <motion.button
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-              onClick={() => setShowCreateDeadline(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium"
-              style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
-            >
-              <Calendar className="w-4 h-4" />ADD DEADLINE
-            </motion.button>
-
             <motion.button whileTap={{ scale: 0.9 }} onClick={toggleTheme}
               className="w-9 h-9 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -305,7 +280,7 @@ export default function AdminDashboard() {
               Admin Control Center
             </h2>
             <p className="text-gray-400 dark:text-gray-300 mt-1 text-sm">
-              Managing <span className="font-semibold text-gray-700 dark:text-white">{users.length} users</span> across the platform.
+              Supervising <span className="font-semibold text-gray-700 dark:text-white">{users.length} users</span> and <span className="font-semibold text-gray-700 dark:text-white">{totalRapports} reports</span> across the platform.
             </p>
           </motion.div>
 
@@ -324,38 +299,55 @@ export default function AdminDashboard() {
                   <Icon className={`w-4 h-4 ${iconColor}`} />
                 </div>
                 <p className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-1">{label}</p>
-                <p className={`text-3xl font-bold ${color} mb-1`} style={{ letterSpacing: '-0.02em' }}>
-                  {value}
-                </p>
+                <p className={`text-3xl font-bold ${color} mb-1`} style={{ letterSpacing: '-0.02em' }}>{value}</p>
                 <p className="text-xs text-gray-400 dark:text-gray-300">{sub}</p>
               </motion.div>
             ))}
           </div>
 
-          {/* CHARTS */}
+          {/* CHARTS ROW */}
           <div className="grid grid-cols-3 gap-4 mb-8">
+
+            {/* Weekly Area Chart */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
               className="col-span-2 bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm"
             >
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Reports Overview</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-300 mb-6">Statut global des rapports</p>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Weekly Report Activity</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-300 mb-6">Rapports soumis et validés par semaine</p>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={barData} barSize={50}>
+                <AreaChart data={weeklyData}>
+                  <defs>
+                    <linearGradient id="colorSoumis" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#142588" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#142588" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorValides" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#006c48" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#006c48" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: axisColor }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="week" tick={{ fontSize: 12, fill: axisColor }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 12, fill: axisColor }} axisLine={false} tickLine={false} />
                   <Tooltip contentStyle={{
                     background: tooltipBg, border: 'none',
                     borderRadius: '12px', fontSize: '12px',
                     color: isDark ? '#fff' : '#111'
                   }} />
-                  <Bar dataKey="value" fill="#142588" radius={[6, 6, 0, 0]} />
-                </BarChart>
+                  <Legend formatter={(value) => (
+                    <span style={{ fontSize: '11px', color: axisColor }}>{value}</span>
+                  )} />
+                  <Area type="monotone" dataKey="soumis" stroke="#142588" strokeWidth={2}
+                    fill="url(#colorSoumis)" name="Soumis" />
+                  <Area type="monotone" dataKey="valides" stroke="#006c48" strokeWidth={2}
+                    fill="url(#colorValides)" name="Validés" />
+                </AreaChart>
               </ResponsiveContainer>
             </motion.div>
 
+            {/* User Distribution Pie */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
@@ -385,7 +377,7 @@ export default function AdminDashboard() {
             </motion.div>
           </div>
 
-          {/* USERS TABLE + DEADLINES */}
+          {/* Report Status + Users */}
           <div className="grid grid-cols-3 gap-4">
 
             {/* Users List */}
@@ -411,7 +403,7 @@ export default function AdminDashboard() {
                 </motion.button>
               </div>
 
-              <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
+              <div className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
                 {users.map((user, i) => (
                   <motion.div
                     key={user.id}
@@ -446,53 +438,53 @@ export default function AdminDashboard() {
               </div>
             </motion.div>
 
-            {/* Deadlines */}
+            {/* Report Status Summary */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
               className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm"
             >
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Deadlines</h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Dates limites</p>
-                </div>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setShowCreateDeadline(true)}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
-                  style={{ background: '#f59e0b' }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </motion.button>
-              </div>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Reports Status</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-300 mb-5">Vue globale des rapports</p>
 
-              <div className="flex flex-col gap-3 max-h-72 overflow-y-auto">
-                {deadlines.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Calendar className="w-10 h-10 mx-auto mb-3 opacity-20 text-gray-400" />
-                    <p className="text-sm text-gray-400 dark:text-gray-300">Aucune deadline</p>
-                  </div>
-                ) : (
-                  deadlines.map((deadline, i) => (
-                    <motion.div
-                      key={deadline.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: i * 0.08 }}
-                      className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/10"
-                      style={{ borderLeft: '3px solid #f59e0b' }}
-                    >
-                      <p className="text-sm font-medium text-gray-800 dark:text-white">{deadline.type}</p>
-                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                        📅 {new Date(deadline.dateLimite).toLocaleDateString('fr-FR', {
-                          day: 'numeric', month: 'long', year: 'numeric'
-                        })}
-                      </p>
-                    </motion.div>
-                  ))
-                )}
+              <div className="flex flex-col gap-4">
+                {[
+                  { label: 'Soumis', value: soumis, total: totalRapports, color: '#142588', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+                  { label: 'Validés', value: valides, total: totalRapports, color: '#006c48', bg: 'bg-green-50 dark:bg-green-900/20' },
+                  { label: 'Rejetés', value: rejetes, total: totalRapports, color: '#ef4444', bg: 'bg-red-50 dark:bg-red-900/20' },
+                ].map((item, i) => (
+                  <motion.div
+                    key={item.label}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.1 + 0.3 }}
+                    className={`p-4 rounded-xl ${item.bg}`}
+                    style={{ borderLeft: `3px solid ${item.color}` }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-gray-800 dark:text-white">{item.label}</p>
+                      <p className="text-lg font-bold" style={{ color: item.color }}>{item.value}</p>
+                    </div>
+                    <div className="h-1.5 bg-white/50 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${item.total > 0 ? (item.value / item.total) * 100 : 0}%` }}
+                        transition={{ delay: i * 0.1 + 0.5, duration: 0.8 }}
+                        className="h-full rounded-full"
+                        style={{ background: item.color }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 dark:text-gray-300 mt-1">
+                      {item.total > 0 ? Math.round((item.value / item.total) * 100) : 0}% du total
+                    </p>
+                  </motion.div>
+                ))}
+
+                {/* Total */}
+                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 text-center">
+                  <p className="text-xs text-gray-400 dark:text-gray-300 uppercase tracking-widest">Total Rapports</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalRapports}</p>
+                </div>
               </div>
             </motion.div>
           </div>
@@ -529,9 +521,7 @@ export default function AdminDashboard() {
 
               {/* Role selector */}
               <div className="mb-5">
-                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
-                  Rôle
-                </label>
+                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">Rôle</label>
                 <div className="flex gap-2">
                   {[
                     { id: 'ETUDIANT', label: 'Étudiant', icon: '🎓' },
@@ -554,7 +544,6 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Fields */}
               {[
                 { key: 'nom', label: 'Nom complet', placeholder: 'Mohamed Aziz Jouini', type: 'text' },
                 { key: 'email', label: 'Email', placeholder: 'user@example.com', type: 'email' },
@@ -587,79 +576,6 @@ export default function AdminDashboard() {
                     className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
                 ) : (
                   <><Plus className="w-4 h-4" />CRÉER LE COMPTE</>
-                )}
-              </motion.button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* MODAL CREATE DEADLINE */}
-      <AnimatePresence>
-        {showCreateDeadline && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}
-            onClick={() => setShowCreateDeadline(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              transition={{ type: 'spring', damping: 25 }}
-              className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white text-lg">Nouvelle Deadline</h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Ajouter une date limite</p>
-                </div>
-                <button onClick={() => setShowCreateDeadline(false)}
-                  className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="mb-4">
-                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
-                  Type de deadline
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Rapport final, Soutenance..."
-                  value={deadlineForm.type}
-                  onChange={e => setDeadlineForm({ ...deadlineForm, type: e.target.value })}
-                  className="w-full bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-amber-500 outline-none text-sm transition-all"
-                />
-              </div>
-
-              <div className="mb-6">
-                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
-                  Date limite
-                </label>
-                <input
-                  type="date"
-                  value={deadlineForm.dateLimite}
-                  onChange={e => setDeadlineForm({ ...deadlineForm, dateLimite: e.target.value })}
-                  className="w-full bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-amber-500 outline-none text-sm transition-all"
-                />
-              </div>
-
-              <motion.button
-                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                onClick={createDeadline}
-                disabled={loadingCreate}
-                className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
-              >
-                {loadingCreate ? (
-                  <motion.div animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
-                ) : (
-                  <><Calendar className="w-4 h-4" />CRÉER LA DEADLINE</>
                 )}
               </motion.button>
             </motion.div>

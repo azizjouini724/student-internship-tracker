@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FileText, Bell, User,
   Settings, HelpCircle, Moon, Sun, LogOut,
   Users, CheckCircle, Clock, TrendingUp,
-  ChevronRight, X, Check, XCircle
+  ChevronRight, X, Check, XCircle, Calendar, Plus
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -24,21 +24,27 @@ export default function SupervisorDashboard() {
   const [rapports, setRapports] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [demandes, setDemandes] = useState<any[]>([])
+  const [deadlines, setDeadlines] = useState<any[]>([])
   const [activeNav, setActiveNav] = useState('Dashboard')
   const [showDemandesModal, setShowDemandesModal] = useState(false)
+  const [showCreateDeadline, setShowCreateDeadline] = useState(false)
   const [loadingAction, setLoadingAction] = useState<number | null>(null)
+  const [loadingDeadline, setLoadingDeadline] = useState(false)
+  const [deadlineForm, setDeadlineForm] = useState({ type: '', dateLimite: '' })
 
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
     try {
       const userId = localStorage.getItem('userId')
-      const [rapportsRes, usersRes] = await Promise.all([
+      const [rapportsRes, usersRes, deadlinesRes] = await Promise.all([
         api.get('/rapports'),
-        api.get('/users')
+        api.get('/users'),
+        api.get('/deadlines')
       ])
       setRapports(rapportsRes.data)
       setUsers(usersRes.data)
+      setDeadlines(deadlinesRes.data)
 
       if (userId) {
         const demandesRes = await api.get(`/demandes/encadrant/${userId}`)
@@ -59,6 +65,25 @@ export default function SupervisorDashboard() {
       toast.error('Erreur lors de la réponse')
     } finally {
       setLoadingAction(null)
+    }
+  }
+
+  const createDeadline = async () => {
+    if (!deadlineForm.type || !deadlineForm.dateLimite) {
+      toast.error('Remplissez tous les champs')
+      return
+    }
+    setLoadingDeadline(true)
+    try {
+      await api.post('/deadlines', deadlineForm)
+      toast.success('Deadline créée !')
+      setShowCreateDeadline(false)
+      setDeadlineForm({ type: '', dateLimite: '' })
+      fetchData()
+    } catch {
+      toast.error('Erreur création deadline')
+    } finally {
+      setLoadingDeadline(false)
     }
   }
 
@@ -125,7 +150,8 @@ export default function SupervisorDashboard() {
       color: 'text-primary',
       bg: 'bg-blue-50 dark:bg-blue-900/20',
       iconColor: 'text-primary',
-      border: 'border-l-primary'
+      border: 'border-l-primary',
+      onClick: () => setShowDemandesModal(true)
     },
   ]
 
@@ -133,6 +159,7 @@ export default function SupervisorDashboard() {
     { icon: LayoutDashboard, label: 'Dashboard' },
     { icon: FileText, label: 'Reports' },
     { icon: Users, label: 'Students' },
+    { icon: Calendar, label: 'Deadlines' },
     { icon: Bell, label: 'Notifications' },
     { icon: User, label: 'Profile' },
   ]
@@ -159,7 +186,7 @@ export default function SupervisorDashboard() {
         </div>
 
         {/* Role Badge */}
-        <div className="mx-2 mb-6 px-3 py-2 rounded-xl text-xs font-medium text-white"
+        <div className="mx-2 mb-4 px-3 py-2 rounded-xl text-xs font-medium text-white"
           style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
           👨‍💼 Supervisor Mode
         </div>
@@ -172,11 +199,11 @@ export default function SupervisorDashboard() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowDemandesModal(true)}
-            className="mx-2 mb-6 px-3 py-2.5 rounded-xl text-xs font-medium flex items-center justify-between"
+            className="mx-2 mb-4 px-3 py-2.5 rounded-xl text-xs font-medium flex items-center justify-between"
             style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}
           >
             <span className="text-amber-600 dark:text-amber-400">
-              🔔 {demandesEnAttente.length} demande{demandesEnAttente.length > 1 ? 's' : ''} en attente
+              🔔 {demandesEnAttente.length} demande(s) en attente
             </span>
             <ChevronRight className="w-3 h-3 text-amber-500" />
           </motion.button>
@@ -237,13 +264,25 @@ export default function SupervisorDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
+
+            {/* ADD DEADLINE Button */}
+            <motion.button
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              onClick={() => setShowCreateDeadline(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium"
+              style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+            >
+              <Calendar className="w-4 h-4" />ADD DEADLINE
+            </motion.button>
+
+            {/* Demandes button */}
             {demandesEnAttente.length > 0 && (
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowDemandesModal(true)}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium relative"
-                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+                style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}
               >
                 <Bell className="w-4 h-4" />
                 DEMANDES
@@ -283,24 +322,30 @@ export default function SupervisorDashboard() {
               Welcome back, {nom?.split(' ')[0] || 'Supervisor'}.
             </h2>
             <p className="text-gray-400 dark:text-gray-300 mt-1 text-sm">
-              Managing <span className="font-semibold" style={{ color: '#421384' }}>{etudiants.length} active</span> internships.
+              Managing{' '}
+              <span className="font-semibold" style={{ color: '#421384' }}>
+                {etudiants.length} active
+              </span>{' '}
+              internships.
               {demandesEnAttente.length > 0 && (
-                <span className="text-amber-500 font-semibold"> {demandesEnAttente.length} demande(s) d'encadrement en attente.</span>
+                <span className="text-amber-500 font-semibold">
+                  {' '}{demandesEnAttente.length} demande(s) d'encadrement en attente.
+                </span>
               )}
             </p>
           </motion.div>
 
           {/* STAT CARDS */}
           <div className="grid grid-cols-4 gap-4 mb-8">
-            {statCards.map(({ icon: Icon, label, value, sub, color, bg, iconColor, border }, i) => (
+            {statCards.map(({ icon: Icon, label, value, sub, color, bg, iconColor, border, onClick }: any, i) => (
               <motion.div
                 key={label}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }}
                 whileHover={{ y: -2, transition: { duration: 0.2 } }}
-                className={`bg-white dark:bg-gray-900 rounded-2xl p-5 border-l-4 ${border} shadow-sm cursor-pointer`}
-                onClick={label === 'Demandes' ? () => setShowDemandesModal(true) : undefined}
+                onClick={onClick}
+                className={`bg-white dark:bg-gray-900 rounded-2xl p-5 border-l-4 ${border} shadow-sm ${onClick ? 'cursor-pointer' : ''}`}
               >
                 <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center mb-3`}>
                   <Icon className={`w-4 h-4 ${iconColor}`} />
@@ -367,28 +412,26 @@ export default function SupervisorDashboard() {
             </motion.div>
           </div>
 
-          {/* PENDING REPORTS + STUDENTS */}
+          {/* BOTTOM ROW — Pending + Students + Deadlines */}
           <div className="grid grid-cols-3 gap-4">
+
+            {/* Pending Reports */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              className="col-span-2 bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm"
+              className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm"
             >
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="font-semibold text-gray-900 dark:text-white">Pending Reviews</h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
-                    Rapports en attente de validation
-                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Rapports à valider</p>
                 </div>
               </div>
               <div className="flex flex-col gap-3">
                 {rapports.filter(r => r.statut === 'SOUMIS').length === 0 ? (
-                  <div className="text-center py-10">
+                  <div className="text-center py-8">
                     <CheckCircle className="w-10 h-10 mx-auto mb-3 opacity-20 text-green-500" />
-                    <p className="text-sm font-medium text-gray-400 dark:text-gray-300">
-                      All caught up! No pending reviews.
-                    </p>
+                    <p className="text-sm text-gray-400 dark:text-gray-300">All caught up!</p>
                   </div>
                 ) : (
                   rapports.filter(r => r.statut === 'SOUMIS').slice(0, 4).map((rapport, i) => (
@@ -397,44 +440,33 @@ export default function SupervisorDashboard() {
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.08 }}
-                      className="flex items-center justify-between p-4 rounded-xl bg-purple-50/50 dark:bg-gray-800"
+                      className="flex items-center justify-between p-3 rounded-xl bg-purple-50/50 dark:bg-gray-800"
                       style={{ borderLeft: '3px solid #421384' }}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold"
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold"
                           style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
                           {rapport.titre?.charAt(0) || 'R'}
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-800 dark:text-white">{rapport.titre}</p>
-                          <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
+                          <p className="text-xs font-medium text-gray-800 dark:text-white">{rapport.titre}</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-300">
                             {rapport.dateDepot
-                              ? new Date(rapport.dateDepot).toLocaleDateString('fr-FR', {
-                                  day: 'numeric', month: 'short'
-                                })
+                              ? new Date(rapport.dateDepot).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
                               : '—'}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium px-3 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                          NEEDS REVIEW
-                        </span>
-                        <motion.button
-                          whileTap={{ scale: 0.9 }}
-                          className="w-8 h-8 rounded-xl flex items-center justify-center text-white"
-                          style={{ background: '#006c48' }}
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                        </motion.button>
-                      </div>
+                      <span className="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        REVIEW
+                      </span>
                     </motion.div>
                   ))
                 )}
               </div>
             </motion.div>
 
-            {/* Students */}
+            {/* Students Progress */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
@@ -465,7 +497,7 @@ export default function SupervisorDashboard() {
                             </div>
                             <p className="text-xs font-medium text-gray-800 dark:text-white">{etudiant.nom}</p>
                           </div>
-                          <span className="text-xs font-semibold text-primary">{progress}%</span>
+                          <span className="text-xs font-semibold" style={{ color: '#421384' }}>{progress}%</span>
                         </div>
                         <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                           <motion.div
@@ -479,6 +511,66 @@ export default function SupervisorDashboard() {
                       </motion.div>
                     )
                   })
+                )}
+              </div>
+            </motion.div>
+
+            {/* Deadlines */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+              className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Deadlines</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Dates limites</p>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowCreateDeadline(true)}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
+                  style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </motion.button>
+              </div>
+
+              <div className="flex flex-col gap-3 max-h-60 overflow-y-auto">
+                {deadlines.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Calendar className="w-10 h-10 mx-auto mb-3 opacity-20 text-gray-400" />
+                    <p className="text-sm text-gray-400 dark:text-gray-300">Aucune deadline</p>
+                    <button
+                      onClick={() => setShowCreateDeadline(true)}
+                      className="mt-2 text-xs font-medium hover:opacity-70 transition-opacity"
+                      style={{ color: '#421384' }}
+                    >
+                      + Ajouter une deadline
+                    </button>
+                  </div>
+                ) : (
+                  deadlines.map((deadline, i) => (
+                    <motion.div
+                      key={deadline.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: i * 0.08 }}
+                      className="p-3 rounded-xl"
+                      style={{
+                        background: 'rgba(66,19,132,0.05)',
+                        borderLeft: '3px solid #421384'
+                      }}
+                    >
+                      <p className="text-sm font-medium text-gray-800 dark:text-white">{deadline.type}</p>
+                      <p className="text-xs mt-1" style={{ color: '#421384' }}>
+                        📅 {new Date(deadline.dateLimite).toLocaleDateString('fr-FR', {
+                          day: 'numeric', month: 'long', year: 'numeric'
+                        })}
+                      </p>
+                    </motion.div>
+                  ))
                 )}
               </div>
             </motion.div>
@@ -505,7 +597,6 @@ export default function SupervisorDashboard() {
               className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-lg shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
-              {/* Header */}
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="font-bold text-gray-900 dark:text-white text-lg">
@@ -523,7 +614,6 @@ export default function SupervisorDashboard() {
                 </button>
               </div>
 
-              {/* Toutes les demandes */}
               <div className="flex flex-col gap-3 max-h-96 overflow-y-auto">
                 {demandes.length === 0 ? (
                   <div className="text-center py-10">
@@ -539,12 +629,11 @@ export default function SupervisorDashboard() {
                       transition={{ delay: i * 0.08 }}
                       className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800"
                       style={{ borderLeft: `3px solid ${
-                        demande.statut === 'ACCEPTE' ? '#006c48' 
-                        : demande.statut === 'REFUSE' ? '#ef4444' 
+                        demande.statut === 'ACCEPTE' ? '#006c48'
+                        : demande.statut === 'REFUSE' ? '#ef4444'
                         : '#421384'
                       }` }}
                     >
-                      {/* Etudiant info */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold"
@@ -573,7 +662,6 @@ export default function SupervisorDashboard() {
                         </span>
                       </div>
 
-                      {/* Message */}
                       <p className="text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-700 rounded-lg p-3 mb-3 italic">
                         "{demande.message}"
                       </p>
@@ -584,7 +672,6 @@ export default function SupervisorDashboard() {
                         })}
                       </p>
 
-                      {/* Actions — seulement si EN_ATTENTE */}
                       {demande.statut === 'EN_ATTENTE' && (
                         <div className="flex gap-2">
                           <motion.button
@@ -611,7 +698,7 @@ export default function SupervisorDashboard() {
                             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-xs font-semibold disabled:opacity-70"
                             style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)' }}
                           >
-                            <><XCircle className="w-3.5 h-3.5" />REFUSER</>
+                            <XCircle className="w-3.5 h-3.5" />REFUSER
                           </motion.button>
                         </div>
                       )}
@@ -619,6 +706,79 @@ export default function SupervisorDashboard() {
                   ))
                 )}
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL CREATE DEADLINE */}
+      <AnimatePresence>
+        {showCreateDeadline && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}
+            onClick={() => setShowCreateDeadline(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-lg">Nouvelle Deadline</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Pour vos étudiants</p>
+                </div>
+                <button onClick={() => setShowCreateDeadline(false)}
+                  className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
+                  Type de deadline
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Rapport final, Soutenance..."
+                  value={deadlineForm.type}
+                  onChange={e => setDeadlineForm({ ...deadlineForm, type: e.target.value })}
+                  className="w-full bg-purple-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-purple-600 outline-none text-sm transition-all"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
+                  Date limite
+                </label>
+                <input
+                  type="date"
+                  value={deadlineForm.dateLimite}
+                  onChange={e => setDeadlineForm({ ...deadlineForm, dateLimite: e.target.value })}
+                  className="w-full bg-purple-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-purple-600 outline-none text-sm transition-all"
+                />
+              </div>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={createDeadline}
+                disabled={loadingDeadline}
+                className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
+                style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}
+              >
+                {loadingDeadline ? (
+                  <motion.div animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                ) : (
+                  <><Calendar className="w-4 h-4" />CRÉER LA DEADLINE</>
+                )}
+              </motion.button>
             </motion.div>
           </motion.div>
         )}
