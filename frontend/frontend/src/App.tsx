@@ -5,6 +5,8 @@ import SupervisorDashboard from './pages/SupervisorDashboard'
 import { useTheme } from './hooks/useTheme'
 import { useAuthStore } from './store/authStore'
 import AdminDashboard from './pages/AdminDashboard'
+import ProfilePage from './pages/ProfilePage'
+
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   const { token } = useAuthStore()
@@ -35,6 +37,8 @@ function App() {
             : <Navigate to="/login" />
         } />
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+        <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
+        
 
       </Routes>
     </BrowserRouter>
