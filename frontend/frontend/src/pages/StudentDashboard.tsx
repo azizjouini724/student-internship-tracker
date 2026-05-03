@@ -225,6 +225,7 @@ const soumettreDemande = async () => {
 
         <div className="flex flex-col gap-1 pt-4" style={{ borderTop: '1px solid rgba(20,37,136,0.06)' }}>
           <motion.button whileHover={{ x: 3 }}
+            onClick={() => navigate('/settings')}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all">
             <Settings className="w-4 h-4" />Settings
           </motion.button>
