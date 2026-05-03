@@ -2,6 +2,7 @@ package com.internship.student_internship_tracker.graphql;
 
 import com.internship.student_internship_tracker.entity.Commentaire;
 import com.internship.student_internship_tracker.entity.Rapport;
+import com.internship.student_internship_tracker.entity.Rapport.StatutRapport;
 import com.internship.student_internship_tracker.entity.User;
 import com.internship.student_internship_tracker.repository.CommentaireRepository;
 import com.internship.student_internship_tracker.repository.DeadlineRepository;
@@ -67,7 +68,7 @@ public class RapportResolver {
         Rapport rapport = Rapport.builder()
                 .titre(titre)
                 .contenu(contenu)
-                .statut("SOUMIS")
+                .statut(Rapport.StatutRapport.SOUMIS)
                 .dateDepot(LocalDateTime.now())
                 .auteur(auteur)
                 .encadrant(encadrant)
@@ -79,7 +80,7 @@ public class RapportResolver {
     @MutationMapping
     public Rapport validerRapport(@Argument Long id, @Argument String statut) {
         Rapport rapport = rapportRepository.findById(id).orElseThrow();
-        rapport.setStatut(statut);
+        rapport.setStatut(StatutRapport.valueOf(statut.toUpperCase()));
         return rapportRepository.save(rapport);
     }
 

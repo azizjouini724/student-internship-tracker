@@ -169,7 +169,7 @@ const soumettreDemande = async () => {
   // ── Nav items avec path ──────────────────────────────────────────────────
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard',     path: null },
-    { icon: FileText,        label: 'Reports',       path: null },
+    { icon: FileText,        label: 'Reports',       path: '/reports' },
     { icon: Bell,            label: 'Notifications', path: null },
     { icon: User,            label: 'Profile',       path: '/profile' },
   ]
@@ -268,6 +268,7 @@ const soumettreDemande = async () => {
 
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={() => navigate('/reports')}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium"
                 style={{ background: 'linear-gradient(135deg, #006c48, #059669)' }}
               >
