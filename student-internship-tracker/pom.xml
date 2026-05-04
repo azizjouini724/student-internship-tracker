@@ -14,8 +14,8 @@
 	<version>0.0.1-SNAPSHOT</version>
 
 	<properties>
-		<!-- ✅ Fix 1 — Java 25 -->
-		<java.version>25</java.version>
+		<!-- ✅ Java 21 LTS — compatible Lombok + Spring Boot 3 -->
+		<java.version>21</java.version>
 	</properties>
 
 	<dependencies>
@@ -120,13 +120,12 @@
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
 				<configuration>
-					<!-- ✅ Fix 3 — source/target Java 25 -->
-					<source>25</source>
-					<target>25</target>
+					<!-- ✅ Java 21 -->
+					<source>21</source>
+					<target>21</target>
 					<annotationProcessorPaths>
 						<path>
 							<groupId>org.projectlombok</groupId>
-							<!-- ✅ Fix 4 — même version que la dépendance -->
 							<artifactId>lombok</artifactId>
 							<version>1.18.36</version>
 						</path>

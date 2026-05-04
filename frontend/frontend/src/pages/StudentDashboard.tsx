@@ -230,6 +230,7 @@ const soumettreDemande = async () => {
             <Settings className="w-4 h-4" />Settings
           </motion.button>
           <motion.button whileHover={{ x: 3 }}
+            onClick={() => navigate('/support')}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all">
             <HelpCircle className="w-4 h-4" />Support
           </motion.button>
