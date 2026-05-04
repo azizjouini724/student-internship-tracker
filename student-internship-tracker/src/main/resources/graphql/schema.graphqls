@@ -5,15 +5,24 @@ type Query {
     users: [User]
     userById(id: ID!): User
     commentairesByRapport(rapportId: ID!): [Commentaire]
-    deadlines: [Deadline]
-    mesNotifications(userId: ID!): [Notification]
+    emailExists(email: String!): Boolean
 }
 
 type Mutation {
-    createRapport(titre: String!, contenu: String!, auteurId: ID!, encadrantId: ID!): Rapport
+    loginGraphQL(email: String!, password: String!): AuthResponse
+    registerGraphQL(nom: String!, email: String!, password: String!, role: String!): AuthResponse
+    createRapport(titre: String!, contenu: String, auteurId: ID!, encadrantId: ID): Rapport
     validerRapport(id: ID!, statut: String!): Rapport
     addCommentaire(contenu: String!, rapportId: ID!, auteurId: ID!): Commentaire
-    createDeadline(type: String!, dateLimite: String!): Deadline
+}
+
+type AuthResponse {
+    token: String
+    role: String
+    nom: String
+    id: ID
+    success: Boolean
+    message: String
 }
 
 type User {
@@ -21,12 +30,17 @@ type User {
     nom: String
     email: String
     role: String
+    telephone: String
+    ville: String
+    entreprise: String
+    photoUrl: String
 }
 
 type Rapport {
     id: ID!
     titre: String
     contenu: String
+    fichierNom: String
     statut: String
     dateDepot: String
     auteur: User
@@ -39,20 +53,4 @@ type Commentaire {
     contenu: String
     dateCreation: String
     auteur: User
-    rapport: Rapport
-}
-
-type Deadline {
-    id: ID!
-    type: String
-    dateLimite: String
-}
-
-type Notification {
-    id: ID!
-    titre: String
-    message: String
-    estLue: Boolean
-    dateEnvoi: String
-    user: User
 }

@@ -5,6 +5,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' }
 })
 
+// ── Envoi du token JWT à chaque requête ───────────────────────────────────
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) {
@@ -12,5 +13,17 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
+
+// ── Gestion des erreurs d'authentification ────────────────────────────────
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      localStorage.clear()
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
 
 export default api

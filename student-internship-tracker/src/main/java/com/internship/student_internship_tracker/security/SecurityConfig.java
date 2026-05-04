@@ -1,6 +1,6 @@
 package com.internship.student_internship_tracker.security;
 
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -14,49 +14,77 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
 import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthFilter jwtAuthFilter;
+    @Autowired
+    private JwtAuthFilter jwtAuthFilter;
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        System.out.println("═══════════════════════════════════════════");
+        System.out.println("🔒 CHARGEMENT SecurityConfig");
+        System.out.println("═══════════════════════════════════════════");
+        
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.disable())
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/auth/login").permitAll()
-                .requestMatchers("/api/auth/register").hasRole("ADMIN")
-                .requestMatchers("/graphql", "/graphiql").permitAll()
-                .anyRequest().authenticated()
-            )
+            .csrf(csrf -> {
+                System.out.println("✓ CSRF désactivé");
+                csrf.disable();
+            })
+            .cors(cors -> {
+                System.out.println("✓ CORS activé");
+                cors.configurationSource(corsConfigurationSource());
+            })
+            .sessionManagement(session -> {
+                System.out.println("✓ Session STATELESS");
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+            })
+            .authorizeHttpRequests(auth -> {
+                System.out.println("📋 Configuration des autorisations :");
+                System.out.println("  ✓ OPTIONS /** → PUBLIC");
+                System.out.println("  ✓ /api/auth/login → PUBLIC");
+                System.out.println("  ✓ /api/auth/register → PUBLIC (temporaire)");
+                System.out.println("  ✓ /graphql → PUBLIC");
+                System.out.println("  ✓ /uploads/** → PUBLIC");
+                System.out.println("  ✓ Reste → AUTHENTICATED");
+                
+                auth
+                    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                    .requestMatchers("/api/auth/login").permitAll()
+                    .requestMatchers("/api/auth/register").permitAll()  // Temporaire pour debug
+                    .requestMatchers("/graphql", "/graphiql/**").permitAll()
+                    .requestMatchers("/uploads/**").permitAll()
+                    .anyRequest().authenticated();
+            })
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
+        System.out.println("═══════════════════════════════════════════");
+        System.out.println("✅ SecurityConfig CHARGÉ AVEC SUCCÈS");
+        System.out.println("═══════════════════════════════════════════");
+        
         return http.build();
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOriginPatterns(List.of("http://localhost:*"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("http://localhost:*"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
+    public PasswordEncoder passwordEncoder() {
+        System.out.println("🔐 BCryptPasswordEncoder créé");
+        return new BCryptPasswordEncoder();
     }
 }
