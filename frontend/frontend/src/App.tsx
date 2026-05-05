@@ -9,6 +9,7 @@ import ProfilePage from './pages/ProfilePage'
 import ReportsPage from './pages/Reportspage'
 import SettingsPage from './pages/SettingsPage.tsx'
 import SupportPage from './pages/Supportpage'
+import NotificationsPage from './pages/NotificationsPage'
 
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
@@ -44,6 +45,7 @@ function App() {
         <Route path="/reports" element={<PrivateRoute><ReportsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
         <Route path="/support" element={<PrivateRoute><SupportPage /></PrivateRoute>} />
+        <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
         
 
       </Routes>

@@ -4,7 +4,7 @@ import {
   ArrowLeft, Mail, Phone, MapPin, Clock,
   MessageSquare, ChevronDown, Send, Check,
   HelpCircle, BookOpen, AlertCircle, Loader2,
-  ExternalLink, Shield, Zap
+  ExternalLink, Shield, Zap, Bug, Clipboard
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
@@ -74,7 +74,6 @@ export default function SupportPage() {
   const navigate  = useNavigate()
   const isDark    = localStorage.getItem('theme') === 'dark'
   const nom       = localStorage.getItem('nom') ?? 'Utilisateur'
-  const email     = localStorage.getItem('email') ?? ''
 
   // ── FAQ ────────────────────────────────────────────────────────────────────
   const [openFaq, setOpenFaq] = useState<number | null>(null)
@@ -273,17 +272,18 @@ export default function SupportPage() {
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { val: 'question',  label: '❓ Question',   },
-                      { val: 'bug',       label: '🐛 Bug / Erreur' },
-                      { val: 'autre',     label: '📋 Autre'        },
-                    ].map(({ val, label }) => (
+                      { val: 'question',  label: 'Question',   icon: HelpCircle },
+                      { val: 'bug',       label: 'Bug / Erreur', icon: Bug },
+                      { val: 'autre',     label: 'Autre',        icon: Clipboard },
+                    ].map(({ val, label, icon: Icon }) => (
                       <button key={val} onClick={() => setForm(p => ({ ...p, type: val }))}
-                        className={`py-2.5 px-3 rounded-xl text-xs font-semibold border-2 transition-all ${
+                        className={`py-2.5 px-3 rounded-xl text-xs font-semibold border-2 transition-all flex items-center justify-center gap-1.5 ${
                           form.type === val
                             ? 'border-blue-500 bg-blue-600 text-white'
                             : isDark ? 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
                                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
                         }`}>
+                        <Icon size={14} />
                         {label}
                       </button>
                     ))}
@@ -409,7 +409,7 @@ export default function SupportPage() {
 
               <div className="space-y-3">
                 {[
-                  { icon: MapPin,  label: 'Adresse',    val: 'Campus Universitaire, Tunis' },
+                  { icon: MapPin,  label: 'Adresse',    val: 'Institut Supérieur des Etudes Technologiques, Bizerte' },
                   { icon: Clock,   label: 'Horaires',   val: 'Lun–Ven : 8h00 – 17h00' },
                   { icon: Phone,   label: 'Standard',   val: '+216 71 000 000' },
                   { icon: Mail,    label: 'Email',       val: 'contact@dossier-pro.tn' },

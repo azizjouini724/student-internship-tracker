@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FileText, Bell, User,
   Settings, HelpCircle, Moon, Sun, LogOut,
   Users, CheckCircle, Clock, TrendingUp,
-  ChevronRight, X, Check, XCircle, Calendar, Plus
+  ChevronRight, X, Check, XCircle, Calendar, Plus, Search, Briefcase
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -59,7 +59,7 @@ export default function SupervisorDashboard() {
     setLoadingAction(demandeId)
     try {
       await api.put(`/demandes/${demandeId}/repondre`, { accepte })
-      toast.success(accepte ? '✅ Demande acceptée !' : '❌ Demande refusée')
+      toast.success(accepte ? 'Demande acceptée !' : 'Demande refusée')
       fetchData()
     } catch {
       toast.error('Erreur lors de la réponse')
@@ -186,9 +186,10 @@ export default function SupervisorDashboard() {
         </div>
 
         {/* Role Badge */}
-        <div className="mx-2 mb-4 px-3 py-2 rounded-xl text-xs font-medium text-white"
+        <div className="mx-2 mb-4 px-3 py-2 rounded-xl text-xs font-medium text-white flex items-center gap-2"
           style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
-          👨‍💼 Supervisor Mode
+          <Briefcase size={14} />
+          Supervisor Mode
         </div>
 
         {/* Demandes Badge */}
@@ -202,8 +203,9 @@ export default function SupervisorDashboard() {
             className="mx-2 mb-4 px-3 py-2.5 rounded-xl text-xs font-medium flex items-center justify-between"
             style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}
           >
-            <span className="text-amber-600 dark:text-amber-400">
-              🔔 {demandesEnAttente.length} demande(s) en attente
+            <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+              <Bell size={13} />
+              {demandesEnAttente.length} demande(s) en attente
             </span>
             <ChevronRight className="w-3 h-3 text-amber-500" />
           </motion.button>
@@ -258,7 +260,7 @@ export default function SupervisorDashboard() {
           style={{ borderBottom: '1px solid rgba(66,19,132,0.06)' }}
         >
           <div className="flex items-center gap-3 bg-purple-50 dark:bg-gray-800 rounded-xl px-4 py-2.5 w-72">
-            <span className="text-gray-400 text-sm">🔍</span>
+            <Search size={16} className="text-gray-400" />
             <input placeholder="Search students or records..."
               className="bg-transparent text-sm text-gray-600 dark:text-gray-100 outline-none w-full placeholder-gray-400 dark:placeholder-gray-500" />
           </div>
@@ -656,9 +658,9 @@ export default function SupervisorDashboard() {
                             ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                             : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                         }`}>
-                          {demande.statut === 'ACCEPTE' ? '✅ Acceptée'
-                            : demande.statut === 'REFUSE' ? '❌ Refusée'
-                            : '⏳ En attente'}
+                          {demande.statut === 'ACCEPTE' ? <><Check size={12} className="inline mr-1" />Acceptée</>
+                            : demande.statut === 'REFUSE' ? <><XCircle size={12} className="inline mr-1" />Refusée</>
+                            : <><Clock size={12} className="inline mr-1" />En attente</>}
                         </span>
                       </div>
 
@@ -666,8 +668,9 @@ export default function SupervisorDashboard() {
                         "{demande.message}"
                       </p>
 
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
-                        📅 {new Date(demande.dateDemande).toLocaleDateString('fr-FR', {
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mb-3 flex items-center gap-1">
+                        <Calendar size={12} />
+                        {new Date(demande.dateDemande).toLocaleDateString('fr-FR', {
                           day: 'numeric', month: 'long', year: 'numeric'
                         })}
                       </p>

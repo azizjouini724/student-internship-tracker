@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, FileText, Bell,
   Settings, HelpCircle, Moon, Sun, LogOut,
   Plus, X, TrendingUp, Activity,
-  GraduationCap, UserCheck, Shield
+  GraduationCap, UserCheck, Shield, Search
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -241,7 +241,7 @@ export default function AdminDashboard() {
           style={{ borderBottom: '1px solid rgba(20,37,136,0.06)' }}
         >
           <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-2.5 w-72">
-            <span className="text-gray-400 text-sm">🔍</span>
+            <Search size={16} className="text-gray-400" />
             <input placeholder="Search users, reports..."
               className="bg-transparent text-sm text-gray-600 dark:text-gray-100 outline-none w-full placeholder-gray-400 dark:placeholder-gray-500" />
           </div>

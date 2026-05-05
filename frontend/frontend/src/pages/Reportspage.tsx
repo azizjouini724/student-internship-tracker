@@ -5,7 +5,7 @@ import {
   Clock, CheckCircle, XCircle, AlertCircle,
   ChevronDown, Eye, Send, BookOpen, Calendar,
   ArrowLeft, Loader2, Upload,
-  Trash2, Download
+  Trash2, Download, Archive, Image, Paperclip, MessageSquare
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
@@ -47,12 +47,12 @@ const MAX_SIZE_MB  = 20
 
 const getFileIcon = (name: string) => {
   const ext = name.split('.').pop()?.toLowerCase()
-  if (ext === 'pdf') return '📄'
-  if (['doc','docx'].includes(ext ?? '')) return '📝'
-  if (['ppt','pptx'].includes(ext ?? '')) return '📊'
-  if (['zip','rar'].includes(ext ?? '')) return '🗜️'
-  if (['png','jpg','jpeg'].includes(ext ?? '')) return '🖼️'
-  return '📎'
+  if (ext === 'pdf') return 'FileText'
+  if (['doc','docx'].includes(ext ?? '')) return 'FileText'
+  if (['ppt','pptx'].includes(ext ?? '')) return 'FileText'
+  if (['zip','rar'].includes(ext ?? '')) return 'Archive'
+  if (['png','jpg','jpeg'].includes(ext ?? '')) return 'Image'
+  return 'Paperclip'
 }
 
 const formatSize = (bytes: number) => {
@@ -347,7 +347,9 @@ export default function ReportsPage() {
         ) : filtered.length === 0 ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className={`rounded-2xl border ${card} p-16 text-center shadow-sm`}>
-            <div className="text-5xl mb-3">📂</div>
+            <div className="flex justify-center mb-3">
+              <FileText size={48} className={isDark ? 'text-gray-700' : 'text-gray-300'} />
+            </div>
             <p className="font-semibold text-lg mb-1">Aucun rapport trouvé</p>
             <p className={`text-sm ${muted} mb-6`}>
               {rapports.length === 0
@@ -365,7 +367,7 @@ export default function ReportsPage() {
             {filtered.map((rapport, i) => {
               const cfg  = STATUT_CONFIG[rapport.statut]
               const Icon = cfg.icon
-              const fileEmoji = rapport.fichierNom ? getFileIcon(rapport.fichierNom) : '📄'
+              const fileIcon = rapport.fichierNom ? getFileIcon(rapport.fichierNom) : 'FileText'
               return (
                 <motion.div key={rapport.id}
                   initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
@@ -393,7 +395,12 @@ export default function ReportsPage() {
                         {/* Fichier joint */}
                         {rapport.fichierNom && (
                           <div className={`inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                            <span>{fileEmoji}</span>
+                            {(() => {
+                              const IconMap: Record<string, any> = { FileText, Archive, Image, Paperclip }
+                              const iconName = fileIcon as keyof typeof IconMap
+                              const FileTypeIcon = IconMap[iconName] || FileText
+                              return <FileTypeIcon size={13} />
+                            })()}
                             <span className="truncate max-w-[180px]">{rapport.fichierNom}</span>
                           </div>
                         )}
@@ -412,7 +419,8 @@ export default function ReportsPage() {
                           )}
                           {rapport.commentaires && rapport.commentaires.length > 0 && (
                             <span className={`text-xs flex items-center gap-1 ${muted}`}>
-                              💬 {rapport.commentaires.length} commentaire{rapport.commentaires.length > 1 ? 's' : ''}
+                              <MessageSquare size={11} />
+                              {rapport.commentaires.length} commentaire{rapport.commentaires.length > 1 ? 's' : ''}
                             </span>
                           )}
                         </div>

@@ -4,7 +4,7 @@ import {
   Mail, Phone, Building2, Calendar, Bell, Camera,
   ChevronLeft, ChevronRight, Plus, X, Check, Clock,
   BookOpen, Briefcase, MapPin, Save, AlertCircle,
-  Upload, Link as LinkIcon, Flag, Trash2,
+  Upload, Link as LinkIcon, Flag, Trash2, FileText,
 } from "lucide-react";
 import axios from "axios";
 
@@ -405,13 +405,13 @@ export default function ProfilePage() {
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: "Rapports",    val: "—",                                          icon: "📄" },
-                  { label: "Deadlines",   val: deadlines.length,                             icon: "⏰" },
-                  { label: "Importantes", val: deadlines.filter(d => d.important).length,    icon: "🚨" },
-                  { label: "Statut",      val: "Actif",                                      icon: "✅" },
+                  { label: "Rapports",    val: "—",                                          icon: FileText },
+                  { label: "Deadlines",   val: deadlines.length,                             icon: Clock },
+                  { label: "Importantes", val: deadlines.filter(d => d.important).length,    icon: Flag },
+                  { label: "Statut",      val: "Actif",                                      icon: Check },
                 ].map((s, i) => (
                   <div key={i} className={`rounded-xl p-3 text-center ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
-                    <div className="text-lg">{s.icon}</div>
+                    <div className="flex justify-center mb-2"><s.icon size={20} className="text-blue-500" /></div>
                     <div className="text-lg font-bold mt-0.5">{s.val}</div>
                     <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>{s.label}</div>
                   </div>

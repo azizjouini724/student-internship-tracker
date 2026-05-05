@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import {
   LayoutDashboard, FileText, Bell, User,
   Settings, HelpCircle, Moon, Sun, LogOut,
-  Plus, TrendingUp, Target, Clock, Award
+  Plus, TrendingUp, Target, Clock, Award, Search
 } from 'lucide-react'
 import { X, Send, UserCheck } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
@@ -170,7 +170,7 @@ const soumettreDemande = async () => {
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard',     path: null },
     { icon: FileText,        label: 'Reports',       path: '/reports' },
-    { icon: Bell,            label: 'Notifications', path: null },
+    { icon: Bell,            label: 'Notifications', path: '/notifications' },
     { icon: User,            label: 'Profile',       path: '/profile' },
   ]
 
@@ -252,7 +252,7 @@ const soumettreDemande = async () => {
           style={{ borderBottom: '1px solid rgba(20,37,136,0.06)' }}
         >
           <div className="flex items-center gap-3 bg-blue-50 dark:bg-gray-800 rounded-xl px-4 py-2.5 w-72">
-            <span className="text-gray-400 text-sm">🔍</span>
+            <Search size={16} className="text-gray-400" />
             <input placeholder="Search dossier..."
               className="bg-transparent text-sm text-gray-600 dark:text-gray-100 outline-none w-full placeholder-gray-400 dark:placeholder-gray-500" />
           </div>
