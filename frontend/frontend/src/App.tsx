@@ -2,6 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import StudentDashboard from './pages/StudentDashboard'
 import SupervisorDashboard from './pages/SupervisorDashboard'
+import SupervisorDeadlinesPage from './pages/SupervisorDeadlinesPage'
+import SupervisorStudentsPage from './pages/Supervisorstudentspage'
+import SupervisorReportsPage from './pages/Supervisorreportspage'
 import { useTheme } from './hooks/useTheme'
 import { useAuthStore } from './store/authStore'
 import AdminDashboard from './pages/AdminDashboard'
@@ -43,9 +46,12 @@ function App() {
         <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
         <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
         <Route path="/reports" element={<PrivateRoute><ReportsPage /></PrivateRoute>} />
+        <Route path="/supervisor/deadlines" element={<PrivateRoute><SupervisorDeadlinesPage /></PrivateRoute>} />
+        <Route path="/supervisor/students" element={<PrivateRoute><SupervisorStudentsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
         <Route path="/support" element={<PrivateRoute><SupportPage /></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
+        <Route path="/supervisor/reports" element={<PrivateRoute><SupervisorReportsPage /></PrivateRoute>} />
         
 
       </Routes>

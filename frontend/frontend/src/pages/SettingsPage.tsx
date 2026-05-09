@@ -190,7 +190,12 @@ export default function SettingsPage() {
         }`}
       >
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/student')}
+          <button onClick={() => {
+  const role = localStorage.getItem('role')
+  if (role === 'ENCADRANT') navigate('/supervisor')
+  else if (role === 'ADMIN') navigate('/admin')
+  else navigate('/student')
+}}
             className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
             <ArrowLeft size={18} />
           </button>

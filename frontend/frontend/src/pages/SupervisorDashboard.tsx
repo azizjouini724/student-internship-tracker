@@ -155,14 +155,19 @@ export default function SupervisorDashboard() {
     },
   ]
 
-  const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard' },
-    { icon: FileText, label: 'Reports' },
-    { icon: Users, label: 'Students' },
-    { icon: Calendar, label: 'Deadlines' },
-    { icon: Bell, label: 'Notifications' },
-    { icon: User, label: 'Profile' },
-  ]
+ const navItems = [
+  { icon: LayoutDashboard, label: 'Dashboard',     path: null },
+  { icon: FileText,        label: 'Reports',       path: '/supervisor/reports' },
+  { icon: Users,           label: 'Students',      path: '/supervisor/students' },
+  { icon: Calendar,        label: 'Deadlines',     path: '/supervisor/deadlines' },
+  { icon: Bell,            label: 'Notifications', path: '/notifications' },
+  { icon: User,            label: 'Profile',       path: '/profile' },
+]
+
+const handleNavClick = (label: string, path: string | null) => {
+  setActiveNav(label)
+  if (path) navigate(path)
+}
 
   return (
     <div className="flex min-h-screen bg-surface dark:bg-gray-950 font-sans">
@@ -212,11 +217,11 @@ export default function SupervisorDashboard() {
         )}
 
         <nav className="flex flex-col gap-1 flex-1">
-          {navItems.map(({ icon: Icon, label }) => (
+          {navItems.map(({ icon: Icon, label, path }) => (
             <motion.button
               key={label}
               whileHover={{ x: 3 }}
-              onClick={() => setActiveNav(label)}
+              onClick={() => handleNavClick(label, path)}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeNav === label
                   ? 'text-white shadow-lg'
@@ -234,11 +239,11 @@ export default function SupervisorDashboard() {
         </nav>
 
         <div className="flex flex-col gap-1 pt-4" style={{ borderTop: '1px solid rgba(66,19,132,0.08)' }}>
-          <motion.button whileHover={{ x: 3 }}
+          <motion.button whileHover={{ x: 3 }} onClick={() => navigate('/settings')}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all">
             <Settings className="w-4 h-4" />Settings
           </motion.button>
-          <motion.button whileHover={{ x: 3 }}
+          <motion.button whileHover={{ x: 3 }} onClick={() => navigate('/support')}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all">
             <HelpCircle className="w-4 h-4" />Support
           </motion.button>
@@ -304,10 +309,23 @@ export default function SupervisorDashboard() {
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </motion.button>
 
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold"
-              style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
-              {nom?.charAt(0).toUpperCase() || 'S'}
-            </div>
+            {(() => {
+            const photoUrl = localStorage.getItem('photoUrl')
+            return photoUrl ? (
+              <motion.button whileHover={{ scale: 1.05 }}
+                onClick={() => navigate('/profile')}
+                className="w-9 h-9 rounded-xl overflow-hidden ring-2 ring-purple-400/30">
+                <img src={photoUrl} alt="avatar" className="w-full h-full object-cover" />
+              </motion.button>
+            ) : (
+              <motion.button whileHover={{ scale: 1.05 }}
+                onClick={() => navigate('/profile')}
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold"
+                style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
+                {nom?.charAt(0).toUpperCase() || 'S'}
+              </motion.button>
+            )
+          })()}
           </div>
         </motion.header>
 

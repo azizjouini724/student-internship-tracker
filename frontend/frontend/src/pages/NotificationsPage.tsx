@@ -145,7 +145,12 @@ export default function NotificationsPage() {
         >
           {/* Back + filter */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <button onClick={() => navigate('/student')}
+            <button onClick={() => {
+  const role = localStorage.getItem('role')
+  if (role === 'ENCADRANT') navigate('/supervisor')
+  else if (role === 'ADMIN') navigate('/admin')
+  else navigate('/student')
+}}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: muted }}>
               <ArrowLeft size={20} />
             </button>
