@@ -8,12 +8,13 @@ import SupervisorReportsPage from './pages/Supervisorreportspage'
 import { useTheme } from './hooks/useTheme'
 import { useAuthStore } from './store/authStore'
 import AdminDashboard from './pages/AdminDashboard'
+import AdminUsersPage from './pages/Adminuserspage'
+import AdminAnalyticsPage from './pages/AdminAnalyticsPage'
 import ProfilePage from './pages/ProfilePage'
 import ReportsPage from './pages/Reportspage'
-import SettingsPage from './pages/SettingsPage.tsx'
+import SettingsPage from './pages/SettingsPage'
 import SupportPage from './pages/Supportpage'
 import NotificationsPage from './pages/NotificationsPage'
-
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   const { token } = useAuthStore()
@@ -27,13 +28,11 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+
+        {/* Auth */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/student" element={
-          <PrivateRoute><StudentDashboard /></PrivateRoute>
-        } />
-        <Route path="/supervisor" element={
-          <PrivateRoute><SupervisorDashboard /></PrivateRoute>
-        } />
+
+        {/* Redirect racine selon le rôle */}
         <Route path="/" element={
           token
             ? role === 'ETUDIANT'
@@ -43,16 +42,29 @@ function App() {
               : <Navigate to="/admin" />
             : <Navigate to="/login" />
         } />
-        <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
-        <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
-        <Route path="/reports" element={<PrivateRoute><ReportsPage /></PrivateRoute>} />
+
+        {/* Étudiant */}
+        <Route path="/student"  element={<PrivateRoute><StudentDashboard /></PrivateRoute>} />
+        <Route path="/reports"  element={<PrivateRoute><ReportsPage /></PrivateRoute>} />
+
+        {/* Encadrant */}
+        <Route path="/supervisor"           element={<PrivateRoute><SupervisorDashboard /></PrivateRoute>} />
         <Route path="/supervisor/deadlines" element={<PrivateRoute><SupervisorDeadlinesPage /></PrivateRoute>} />
-        <Route path="/supervisor/students" element={<PrivateRoute><SupervisorStudentsPage /></PrivateRoute>} />
-        <Route path="/settings" element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
-        <Route path="/support" element={<PrivateRoute><SupportPage /></PrivateRoute>} />
+        <Route path="/supervisor/students"  element={<PrivateRoute><SupervisorStudentsPage /></PrivateRoute>} />
+        <Route path="/supervisor/reports"   element={<PrivateRoute><SupervisorReportsPage /></PrivateRoute>} />
+
+        {/* Admin */}
+        <Route path="/admin"                element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+        <Route path="/admin/users"          element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
+        <Route path="/admin/analytics"      element={<PrivateRoute><AdminAnalyticsPage /></PrivateRoute>} />
+        <Route path="/admin/notifications"  element={<PrivateRoute><NotificationsPage /></PrivateRoute>} /> {/* ✅ AJOUTÉ */}
+               
+
+        {/* Partagées */}
+        <Route path="/profile"       element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
+        <Route path="/settings"      element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
+        <Route path="/support"       element={<PrivateRoute><SupportPage /></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
-        <Route path="/supervisor/reports" element={<PrivateRoute><SupervisorReportsPage /></PrivateRoute>} />
-        
 
       </Routes>
     </BrowserRouter>

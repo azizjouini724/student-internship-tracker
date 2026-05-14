@@ -26,7 +26,7 @@ interface UserProfile {
 interface PersonalEvent {
   id: number;
   titre: string;
-  date: string;          // format "yyyy-MM-dd"
+  date: string;          // format "2026-05-15"
   description?: string;
   important: boolean;
 }
