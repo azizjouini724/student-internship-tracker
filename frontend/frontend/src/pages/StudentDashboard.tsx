@@ -5,7 +5,7 @@ import {
   Settings, HelpCircle, Moon, Sun, LogOut,
   Plus, TrendingUp, Target, Clock, Award, Search
 } from 'lucide-react'
-import { X, Send, UserCheck } from 'lucide-react'
+import { X, Send, UserCheck, AlertCircle } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -17,9 +17,6 @@ import { useTheme } from '../hooks/useTheme'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
 import api from '../services/api'
-
-
-
 
 const COLORS = ['#142588', '#006c48', '#ef4444', '#f59e0b']
 
@@ -35,70 +32,114 @@ export default function StudentDashboard() {
   const [messageDemande, setMessageDemande] = useState('')
   const [demandes, setDemandes] = useState<any[]>([])
   const [loadingDemande, setLoadingDemande] = useState(false)
-  
+  const [deadlines, setDeadlines] = useState<any[]>([])
 
   useEffect(() => {
-  fetchRapports()
-  fetchEncadrants()
-  fetchDemandes()
-}, [])
+    fetchRapports()
+    fetchEncadrants()
+    fetchDemandes()
+    fetchDeadlines()
+  }, [])
 
+  // ✅ FIX A — Récupère uniquement les rapports de CET étudiant
   const fetchRapports = async () => {
     try {
-      const res = await api.get('/rapports')
+      const userId = localStorage.getItem('userId')
+      if (!userId) return
+      const res = await api.get(`/rapports/etudiant/${userId}`)
       setRapports(res.data)
     } catch {
       toast.error('Erreur de chargement')
     }
   }
+
   const fetchEncadrants = async () => {
-  try {
-    const res = await api.get('/users')
-    setEncadrants(res.data.filter((u: any) => u.role === 'ENCADRANT'))
-  } catch {
-    toast.error('Erreur chargement encadrants')
+    try {
+      const res = await api.get('/users')
+      setEncadrants(res.data.filter((u: any) => u.role === 'ENCADRANT'))
+    } catch {
+      toast.error('Erreur chargement encadrants')
+    }
   }
-}
 
-const fetchDemandes = async () => {
-  try {
-    const userId = localStorage.getItem('userId')
-    if (!userId) return
-    const res = await api.get(`/demandes/etudiant/${userId}`)
-    setDemandes(res.data)
-  } catch {
-    console.error('Erreur demandes')
+  const fetchDemandes = async () => {
+    try {
+      const userId = localStorage.getItem('userId')
+      if (!userId) return
+      const res = await api.get(`/demandes/etudiant/${userId}`)
+      setDemandes(res.data)
+    } catch {
+      console.error('Erreur demandes')
+    }
   }
-}
 
-const soumettreDemande = async () => {
-  if (!selectedEncadrant) {
-    toast.error('Sélectionnez un encadrant')
-    return
+  // ✅ FIX C — Récupère les deadlines de SON encadrant uniquement
+  const fetchDeadlines = async () => {
+    try {
+      const userId = localStorage.getItem('userId')
+      if (!userId) return
+      
+      // D'abord récupérer l'étudiant pour connaître son encadrant
+      const userRes = await api.get(`/users/${userId}`)
+      const encadrantId = userRes.data.encadrant?.id
+      
+      if (encadrantId) {
+        const res = await api.get(`/deadlines/encadrant/${encadrantId}`)
+        setDeadlines(res.data)
+      } else {
+        setDeadlines([]) // Pas d'encadrant = pas de deadlines
+      }
+    } catch {
+      console.error('Erreur chargement deadlines')
+      setDeadlines([])
+    }
   }
-  if (!messageDemande.trim()) {
-    toast.error('Écrivez un message')
-    return
+
+  const soumettreDemande = async () => {
+    if (!selectedEncadrant) {
+      toast.error('Sélectionnez un encadrant')
+      return
+    }
+    if (!messageDemande.trim()) {
+      toast.error('Écrivez un message')
+      return
+    }
+    setLoadingDemande(true)
+    try {
+      const userId = localStorage.getItem('userId')
+      await api.post('/demandes', {
+        etudiantId: userId,
+        encadrantId: selectedEncadrant.id,
+        message: messageDemande
+      })
+      toast.success('Demande envoyée à ' + selectedEncadrant.nom + ' !')
+      setShowDemandeModal(false)
+      setMessageDemande('')
+      setSelectedEncadrant(null)
+      fetchDemandes()
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erreur envoi demande')
+    } finally {
+      setLoadingDemande(false)
+    }
   }
-  setLoadingDemande(true)
-  try {
-    const userId = localStorage.getItem('userId')
-    await api.post('/demandes', {
-      etudiantId: userId,
-      encadrantId: selectedEncadrant.id,
-      message: messageDemande
-    })
-    toast.success('Demande envoyée à ' + selectedEncadrant.nom + ' !')
-    setShowDemandeModal(false)
-    setMessageDemande('')
-    setSelectedEncadrant(null)
-    fetchDemandes()
-  } catch (error: any) {
-    toast.error(error.response?.data?.error || 'Erreur envoi demande')
-  } finally {
-    setLoadingDemande(false)
+
+  // ✅ FIX B — Vérifie si l'étudiant a un encadrant accepté
+  const encadrantAccepte = demandes.find(d => d.statut === 'ACCEPTE')
+  const demandeEnAttente = demandes.find(d => d.statut === 'EN_ATTENTE')
+
+  // ✅ FIX B — Clic sur NEW SUBMISSION : bloqué sans encadrant accepté
+  const handleNewSubmission = () => {
+    if (!encadrantAccepte) {
+      toast.error(
+        demandeEnAttente
+          ? 'Votre demande est en attente. Attendez la réponse de ' + demandeEnAttente.encadrant?.nom
+          : 'Vous devez avoir un encadrant accepté avant de soumettre un rapport'
+      )
+      return
+    }
+    navigate('/reports')
   }
-}
 
   const total = rapports.length
   const soumis = rapports.filter(r => r.statut === 'SOUMIS').length
@@ -125,56 +166,38 @@ const soumettreDemande = async () => {
 
   const statCards = [
     {
-      icon: Target,
-      label: 'Completion Score',
-      value: `${completionScore}%`,
-      sub: 'Rapports validés',
-      color: 'text-primary',
-      bg: 'bg-blue-50 dark:bg-blue-900/20',
-      iconColor: 'text-primary',
-      border: 'border-l-primary'
+      icon: Target, label: 'Completion Score',
+      value: `${completionScore}%`, sub: 'Rapports validés',
+      color: 'text-primary', bg: 'bg-blue-50 dark:bg-blue-900/20',
+      iconColor: 'text-primary', border: 'border-l-primary'
     },
     {
-      icon: TrendingUp,
-      label: 'Progress Rate',
-      value: `${total > 0 ? Math.round((total / 10) * 100) : 0}%`,
-      sub: `${total} / 10 rapports`,
-      color: 'text-secondary',
-      bg: 'bg-green-50 dark:bg-green-900/20',
-      iconColor: 'text-secondary',
-      border: 'border-l-secondary'
+      icon: TrendingUp, label: 'Progress Rate',
+      value: `${total > 0 ? Math.round((total / 10) * 100) : 0}%`, sub: `${total} / 10 rapports`,
+      color: 'text-secondary', bg: 'bg-green-50 dark:bg-green-900/20',
+      iconColor: 'text-secondary', border: 'border-l-secondary'
     },
     {
-      icon: Clock,
-      label: 'On Time Rate',
-      value: `${onTimeRate}%`,
-      sub: 'Soumis dans les délais',
-      color: 'text-purple-600',
-      bg: 'bg-purple-50 dark:bg-purple-900/20',
-      iconColor: 'text-purple-600',
-      border: 'border-l-purple-500'
+      icon: Clock, label: 'On Time Rate',
+      value: `${onTimeRate}%`, sub: 'Soumis dans les délais',
+      color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20',
+      iconColor: 'text-purple-600', border: 'border-l-purple-500'
     },
     {
-      icon: Award,
-      label: 'Total Submissions',
-      value: String(total).padStart(2, '0'),
-      sub: 'Rapports soumis',
-      color: 'text-amber-600',
-      bg: 'bg-amber-50 dark:bg-amber-900/20',
-      iconColor: 'text-amber-600',
-      border: 'border-l-amber-500'
+      icon: Award, label: 'Total Submissions',
+      value: String(total).padStart(2, '0'), sub: 'Rapports soumis',
+      color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20',
+      iconColor: 'text-amber-600', border: 'border-l-amber-500'
     },
   ]
 
-  // ── Nav items avec path ──────────────────────────────────────────────────
   const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard',     path: null },
-    { icon: FileText,        label: 'Reports',       path: '/reports' },
-    { icon: Bell,            label: 'Notifications', path: '/notifications' },
-    { icon: User,            label: 'Profile',       path: '/profile' },
+    { icon: LayoutDashboard, label: 'Dashboard',     path: null           },
+    { icon: FileText,        label: 'Reports',       path: '/reports'     },
+    { icon: Bell,            label: 'Notifications', path: '/notifications'},
+    { icon: User,            label: 'Profile',       path: '/profile'     },
   ]
 
-  // ── Gestion du clic nav ──────────────────────────────────────────────────
   const handleNavClick = (label: string, path: string | null) => {
     setActiveNav(label)
     if (path) navigate(path)
@@ -192,24 +215,20 @@ const soumettreDemande = async () => {
 
       {/* SIDEBAR */}
       <motion.aside
-        initial={{ x: -80, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
+        initial={{ x: -80, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.5 }}
         className="w-64 bg-white dark:bg-gray-900 flex flex-col py-8 px-5"
         style={{ borderRight: '1px solid rgba(20,37,136,0.06)' }}
       >
         <div className="mb-10 px-2">
           <h1 className="text-primary font-bold text-lg tracking-wide">Dossier Pro</h1>
-          <p className="text-gray-400 dark:text-gray-400 text-xs tracking-widest uppercase mt-0.5">
-            Internship Portal
-          </p>
+          <p className="text-gray-400 text-xs tracking-widest uppercase mt-0.5">Internship Portal</p>
         </div>
 
         <nav className="flex flex-col gap-1 flex-1">
           {navItems.map(({ icon: Icon, label, path }) => (
             <motion.button
-              key={label}
-              whileHover={{ x: 3 }}
+              key={label} whileHover={{ x: 3 }}
               onClick={() => handleNavClick(label, path)}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeNav === label
@@ -217,20 +236,17 @@ const soumettreDemande = async () => {
                   : 'text-gray-500 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-800 hover:text-primary dark:hover:text-white'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              {label}
+              <Icon className="w-4 h-4" />{label}
             </motion.button>
           ))}
         </nav>
 
         <div className="flex flex-col gap-1 pt-4" style={{ borderTop: '1px solid rgba(20,37,136,0.06)' }}>
-          <motion.button whileHover={{ x: 3 }}
-            onClick={() => navigate('/settings')}
+          <motion.button whileHover={{ x: 3 }} onClick={() => navigate('/settings')}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all">
             <Settings className="w-4 h-4" />Settings
           </motion.button>
-          <motion.button whileHover={{ x: 3 }}
-            onClick={() => navigate('/support')}
+          <motion.button whileHover={{ x: 3 }} onClick={() => navigate('/support')}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all">
             <HelpCircle className="w-4 h-4" />Support
           </motion.button>
@@ -246,8 +262,7 @@ const soumettreDemande = async () => {
 
         {/* TOPBAR */}
         <motion.header
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
+          initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
           className="flex items-center justify-between px-8 py-4 bg-white dark:bg-gray-900"
           style={{ borderBottom: '1px solid rgba(20,37,136,0.06)' }}
         >
@@ -259,20 +274,38 @@ const soumettreDemande = async () => {
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <motion.button
-                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                onClick={() => setShowDemandeModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium shadow-lg shadow-primary/20"
-                style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
-              >
-                <UserCheck className="w-4 h-4" />DEMANDER ENCADRANT
-              </motion.button>
 
+              {/* ✅ FIX B — Cacher le bouton demande si encadrant déjà accepté */}
+              {!encadrantAccepte && (
+                <motion.button
+                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowDemandeModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium shadow-lg shadow-primary/20"
+                  style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
+                >
+                  <UserCheck className="w-4 h-4" />DEMANDER ENCADRANT
+                </motion.button>
+              )}
+
+              {/* ✅ FIX B — Afficher l'encadrant accepté si disponible */}
+              {encadrantAccepte && (
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                  <UserCheck className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                    {encadrantAccepte.encadrant?.nom}
+                  </span>
+                </div>
+              )}
+
+              {/* ✅ FIX B — NEW SUBMISSION bloqué si pas d'encadrant accepté */}
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                onClick={() => navigate('/reports')}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium"
+                onClick={handleNewSubmission}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium transition-all ${
+                  !encadrantAccepte ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
                 style={{ background: 'linear-gradient(135deg, #006c48, #059669)' }}
+                title={!encadrantAccepte ? 'Vous devez avoir un encadrant accepté' : ''}
               >
                 <Plus className="w-4 h-4" />NEW SUBMISSION
               </motion.button>
@@ -283,13 +316,10 @@ const soumettreDemande = async () => {
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </motion.button>
 
-            {/* Avatar cliquable → Profile */}
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/profile')}
               className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white text-sm font-bold"
-              title="Mon profil"
             >
               {nom?.charAt(0).toUpperCase() || 'U'}
             </motion.button>
@@ -300,10 +330,7 @@ const soumettreDemande = async () => {
         <div className="flex-1 p-8 overflow-auto">
 
           {/* Welcome */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>
               Hello, {nom?.split(' ')[0] || 'Student'}.
             </h2>
@@ -312,13 +339,28 @@ const soumettreDemande = async () => {
             </p>
           </motion.div>
 
+          {/* ✅ FIX B — Bannière avertissement si pas d'encadrant */}
+          {!encadrantAccepte && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+              className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
+            >
+              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                {demandeEnAttente
+                  ? `Demande en attente auprès de ${demandeEnAttente.encadrant?.nom}. Vous pourrez soumettre un rapport dès son acceptation.`
+                  : 'Vous n\'avez pas encore d\'encadrant. Faites une demande pour pouvoir soumettre des rapports.'
+                }
+              </p>
+            </motion.div>
+          )}
+
           {/* STAT CARDS */}
           <div className="grid grid-cols-4 gap-4 mb-8">
             {statCards.map(({ icon: Icon, label, value, sub, color, bg, iconColor, border }, i) => (
               <motion.div
                 key={label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }}
                 whileHover={{ y: -2, transition: { duration: 0.2 } }}
                 className={`bg-white dark:bg-gray-900 rounded-2xl p-5 border-l-4 ${border} shadow-sm`}
@@ -327,9 +369,7 @@ const soumettreDemande = async () => {
                   <Icon className={`w-4 h-4 ${iconColor}`} />
                 </div>
                 <p className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-1">{label}</p>
-                <p className={`text-3xl font-bold ${color} mb-1`} style={{ letterSpacing: '-0.02em' }}>
-                  {value}
-                </p>
+                <p className={`text-3xl font-bold ${color} mb-1`} style={{ letterSpacing: '-0.02em' }}>{value}</p>
                 <p className="text-xs text-gray-400 dark:text-gray-300">{sub}</p>
               </motion.div>
             ))}
@@ -337,8 +377,6 @@ const soumettreDemande = async () => {
 
           {/* CHARTS ROW */}
           <div className="grid grid-cols-3 gap-4 mb-8">
-
-            {/* Line Chart */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
@@ -352,16 +390,7 @@ const soumettreDemande = async () => {
                     <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                     <XAxis dataKey="name" tick={{ fontSize: 12, fill: axisColor }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 12, fill: axisColor }} axisLine={false} tickLine={false} domain={[0, 100]} />
-                    <Tooltip
-                      contentStyle={{
-                        background: tooltipBg,
-                        border: 'none',
-                        borderRadius: '12px',
-                        boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
-                        fontSize: '12px',
-                        color: isDark ? '#fff' : '#111'
-                      }}
-                    />
+                    <Tooltip contentStyle={{ background: tooltipBg, border: 'none', borderRadius: '12px', fontSize: '12px', color: isDark ? '#fff' : '#111' }} />
                     <Line type="monotone" dataKey="score" stroke="#142588" strokeWidth={2.5}
                       dot={{ fill: '#142588', r: 4 }} activeDot={{ r: 6 }} />
                   </LineChart>
@@ -376,7 +405,6 @@ const soumettreDemande = async () => {
               )}
             </motion.div>
 
-            {/* Pie Chart */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
@@ -387,25 +415,13 @@ const soumettreDemande = async () => {
               {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={180}>
                   <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75}
-                      paddingAngle={3} dataKey="value">
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
                       {pieData.map((_, index) => (
                         <Cell key={index} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        background: tooltipBg,
-                        border: 'none',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                        color: isDark ? '#fff' : '#111'
-                      }}
-                    />
-                    <Legend iconType="circle" iconSize={8}
-                      formatter={(value) => (
-                        <span style={{ fontSize: '11px', color: legendColor }}>{value}</span>
-                      )} />
+                    <Tooltip contentStyle={{ background: tooltipBg, border: 'none', borderRadius: '12px', fontSize: '12px', color: isDark ? '#fff' : '#111' }} />
+                    <Legend iconType="circle" iconSize={8} formatter={(value) => <span style={{ fontSize: '11px', color: legendColor }}>{value}</span>} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
@@ -433,8 +449,7 @@ const soumettreDemande = async () => {
                 {demandes.map((demande, i) => (
                   <motion.div
                     key={demande.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
+                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.08 }}
                     className="flex items-center justify-between p-4 rounded-xl bg-blue-50/50 dark:bg-gray-800"
                     style={{ borderLeft: '3px solid #142588' }}
@@ -480,7 +495,7 @@ const soumettreDemande = async () => {
                 <h3 className="font-semibold text-gray-900 dark:text-white">Recent Submissions</h3>
                 <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Your latest internship reports</p>
               </div>
-              <button className="text-sm text-primary font-medium hover:opacity-70 transition-opacity">
+              <button onClick={() => navigate('/reports')} className="text-sm text-primary font-medium hover:opacity-70 transition-opacity">
                 View All →
               </button>
             </div>
@@ -490,14 +505,15 @@ const soumettreDemande = async () => {
                 <div className="text-center py-12">
                   <FileText className="w-10 h-10 mx-auto mb-3 opacity-20 text-gray-400 dark:text-gray-500" />
                   <p className="text-sm font-medium text-gray-400 dark:text-gray-300">No reports submitted yet</p>
-                  <p className="text-xs mt-1 text-gray-400 dark:text-gray-500">Click NEW SUBMISSION to get started</p>
+                  <p className="text-xs mt-1 text-gray-400 dark:text-gray-500">
+                    {encadrantAccepte ? 'Click NEW SUBMISSION to get started' : 'Request a supervisor first'}
+                  </p>
                 </div>
               ) : (
                 rapports.slice(0, 5).map((rapport, i) => (
                   <motion.div
                     key={rapport.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
+                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.08 }}
                     whileHover={{ x: 2 }}
                     className="flex items-center justify-between p-4 rounded-xl bg-blue-50/50 dark:bg-gray-800 cursor-pointer transition-all"
@@ -511,9 +527,7 @@ const soumettreDemande = async () => {
                         <p className="text-sm font-medium text-gray-800 dark:text-white">{rapport.titre}</p>
                         <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
                           {rapport.dateDepot
-                            ? new Date(rapport.dateDepot).toLocaleDateString('fr-FR', {
-                                day: 'numeric', month: 'short', year: 'numeric'
-                              })
+                            ? new Date(rapport.dateDepot).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
                             : '—'}
                         </p>
                       </div>
@@ -533,9 +547,7 @@ const soumettreDemande = async () => {
       <AnimatePresence>
         {showDemandeModal && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}
             onClick={() => setShowDemandeModal(false)}
@@ -548,39 +560,28 @@ const soumettreDemande = async () => {
               className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
-              {/* Header */}
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white text-lg">
-                    Demander un Encadrant
-                  </h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
-                    Choisissez votre encadrant de stage
-                  </p>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-lg">Demander un Encadrant</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Choisissez votre encadrant de stage</p>
                 </div>
-                <button
-                  onClick={() => setShowDemandeModal(false)}
-                  className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
-                >
+                <button onClick={() => setShowDemandeModal(false)}
+                  className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Encadrants list */}
               <div className="mb-4">
                 <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
                   Choisir un encadrant
                 </label>
                 <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
                   {encadrants.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-4">
-                      Aucun encadrant disponible
-                    </p>
+                    <p className="text-sm text-gray-400 text-center py-4">Aucun encadrant disponible</p>
                   ) : (
                     encadrants.map(enc => (
                       <motion.button
-                        key={enc.id}
-                        whileTap={{ scale: 0.98 }}
+                        key={enc.id} whileTap={{ scale: 0.98 }}
                         onClick={() => setSelectedEncadrant(enc)}
                         className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all ${
                           selectedEncadrant?.id === enc.id
@@ -589,9 +590,7 @@ const soumettreDemande = async () => {
                         }`}
                       >
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
-                          selectedEncadrant?.id === enc.id
-                            ? 'bg-white/20 text-white'
-                            : 'bg-primary/10 text-primary'
+                          selectedEncadrant?.id === enc.id ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary'
                         }`}>
                           {enc.nom?.charAt(0)}
                         </div>
@@ -601,20 +600,15 @@ const soumettreDemande = async () => {
                             {enc.email}
                           </p>
                         </div>
-                        {selectedEncadrant?.id === enc.id && (
-                          <UserCheck className="w-4 h-4 ml-auto" />
-                        )}
+                        {selectedEncadrant?.id === enc.id && <UserCheck className="w-4 h-4 ml-auto" />}
                       </motion.button>
                     ))
                   )}
                 </div>
               </div>
 
-              {/* Message */}
               <div className="mb-6">
-                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
-                  Message
-                </label>
+                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">Message</label>
                 <textarea
                   value={messageDemande}
                   onChange={e => setMessageDemande(e.target.value)}
@@ -624,26 +618,18 @@ const soumettreDemande = async () => {
                 />
               </div>
 
-              {/* Submit */}
               <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                 onClick={soumettreDemande}
                 disabled={loadingDemande}
                 className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
                 style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
               >
                 {loadingDemande ? (
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
-                  />
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
                 ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    ENVOYER LA DEMANDE
-                  </>
+                  <><Send className="w-4 h-4" />ENVOYER LA DEMANDE</>
                 )}
               </motion.button>
             </motion.div>

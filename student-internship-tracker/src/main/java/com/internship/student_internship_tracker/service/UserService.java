@@ -5,7 +5,9 @@ import com.internship.student_internship_tracker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import com.internship.student_internship_tracker.entity.Role;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -25,6 +27,14 @@ public class UserService {
     public User getUserById(Long id) {
         return userRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Utilisateur introuvable : " + id));
+    }
+
+    // ✅ NOUVEAU — Étudiants d'un encadrant spécifique
+    // ✅ NOUVEAU — Récupérer les étudiants d'un encadrant
+       // ✅ GARDE SEULEMENT UNE FOIS (cherche et supprime le doublon)
+   
+    public List<User> getEtudiantsByEncadrant(Long encadrantId) {
+        return userRepository.findByEncadrantIdAndRole(encadrantId, Role.ETUDIANT);
     }
 
     // ── Mettre à jour le profil ────────────────────────────────────────────
@@ -60,12 +70,10 @@ public class UserService {
     public void changePassword(Long id, String ancienMotDePasse, String nouveauMotDePasse) {
         User user = getUserById(id);
 
-        // ✅ Vérifier avec BCrypt
         if (!passwordEncoder.matches(ancienMotDePasse, user.getMotDePasse())) {
             throw new RuntimeException("Mot de passe actuel incorrect.");
         }
 
-        // Hacher et sauvegarder
         user.setMotDePasse(passwordEncoder.encode(nouveauMotDePasse));
         userRepository.save(user);
     }
@@ -76,4 +84,6 @@ public class UserService {
             throw new RuntimeException("Utilisateur introuvable : " + id);
         }
         userRepository.deleteById(id);
-    }}
+    }
+    
+}

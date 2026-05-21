@@ -14,27 +14,32 @@ export default function LoginPage() {
   const { setAuth } = useAuthStore()
 
   const handleLogin = async () => {
-  if (!form.email || !form.password) {
-    toast.error('Veuillez remplir tous les champs')
-    return
+    if (!form.email || !form.password) {
+      toast.error('Veuillez remplir tous les champs')
+      return
+    }
+    setLoading(true)
+    try {
+      const data = await authService.login(form.email, form.password)
+      setAuth(data.token, data.role, data.nom)
+      localStorage.setItem('userId', String(data.id))
+      toast.success('Connexion réussie !')
+      setTimeout(() => {
+        // ✅ FIX : Ajoute { replace: true } pour vider l'historique
+        if (data.role === 'ETUDIANT') {
+          navigate('/student', { replace: true })
+        } else if (data.role === 'ENCADRANT') {
+          navigate('/supervisor', { replace: true })
+        } else {
+          navigate('/admin', { replace: true })
+        }
+      }, 1000)
+    } catch (error) {
+      toast.error('Email ou mot de passe incorrect')
+    } finally {
+      setLoading(false)
+    }
   }
-  setLoading(true)
-  try {
-    const data = await authService.login(form.email, form.password)
-    setAuth(data.token, data.role, data.nom)
-    localStorage.setItem('userId', String(data.id))
-    toast.success('Connexion réussie !')
-    setTimeout(() => {
-      if (data.role === 'ETUDIANT') navigate('/student')
-      else if (data.role === 'ENCADRANT') navigate('/supervisor')
-      else navigate('/admin')
-    }, 1000)
-  } catch (error) {
-    toast.error('Email ou mot de passe incorrect')
-  } finally {
-    setLoading(false)
-  }
-}
 
   return (
     <div className="min-h-screen bg-surface dark:bg-gray-950 flex items-center justify-center p-4">

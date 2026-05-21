@@ -20,10 +20,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ token, role, nom })
   },
 
+  // ✅ FIX : Force le redirect + vide TOUT le localStorage
   logout: () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('role')
-    localStorage.removeItem('nom')
+    localStorage.clear() // Vide TOUT au lieu de removeItem un par un
     set({ token: null, role: null, nom: null })
+    
+    // Force le reload pour vider le cache du router
+    window.location.href = '/login'
   }
 }))

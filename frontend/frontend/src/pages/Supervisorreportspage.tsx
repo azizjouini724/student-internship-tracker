@@ -17,6 +17,9 @@ interface Rapport {
   titre: string
   contenu?: string
   fichierNom?: string
+  fichierChemin?: string
+  fichierType?: string
+  fichierTaille?: number
   fichierUrl?: string
   statut: 'SOUMIS' | 'VALIDE' | 'REJETE'
   dateDepot: string
@@ -33,14 +36,22 @@ interface Commentaire {
   auteur?: { id: number; nom: string }
 }
 
-// ─── Statut config ─────────────────────────────────────────────────────────────
+// ─── Statut config ────────────────────────────────────────────────────────────
 const STATUT = {
   SOUMIS:  { label: 'En attente', icon: Clock,       badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',     border: 'border-l-amber-500',   dot: 'bg-amber-500' },
   VALIDE:  { label: 'Validé',     icon: CheckCircle2, badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', border: 'border-l-emerald-500', dot: 'bg-emerald-500' },
   REJETE:  { label: 'Rejeté',     icon: XCircle,      badge: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',             border: 'border-l-red-500',     dot: 'bg-red-500' },
 }
 
-// ─── Score Stars ──────────────────────────────────────────────────────────────
+// ─── Format taille fichier ──────────────────────────────────────────────────
+const formatFileSize = (bytes?: number) => {
+  if (!bytes) return ''
+  if (bytes < 1024) return bytes + ' o'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' Mo'
+}
+
+// ─── Score Stars ─────────────────────────────────────────────────────────────
 function ScoreStars({ value, onChange, readonly = false }: { value: number; onChange?: (v: number) => void; readonly?: boolean }) {
   const [hover, setHover] = useState(0)
   return (
@@ -72,31 +83,34 @@ export default function SupervisorReportsPage() {
   const userId     = localStorage.getItem('userId')
   const supervisorNom = localStorage.getItem('nom') ?? 'Encadrant'
 
-  // ── Data ───────────────────────────────────────────────────────────────────
+  // ── Data ─────────────────────────────────────────────────────────────────
   const [rapports,  setRapports]  = useState<Rapport[]>([])
   const [loading,   setLoading]   = useState(true)
   const [selected,  setSelected]  = useState<Rapport | null>(null)
 
-  // ── Filters ────────────────────────────────────────────────────────────────
+  // ── Filters ──────────────────────────────────────────────────────────────
   const [search,    setSearch]    = useState('')
   const [filter,    setFilter]    = useState<'ALL' | 'SOUMIS' | 'VALIDE' | 'REJETE'>('ALL')
 
-  // ── Actions ────────────────────────────────────────────────────────────────
+  // ── Actions ──────────────────────────────────────────────────────────────
   const [validating,  setValidating]  = useState(false)
   const [score,       setScore]       = useState(0)
   const [comment,     setComment]     = useState('')
   const [sendingCom,  setSendingCom]  = useState(false)
+  const [downloadingId, setDownloadingId] = useState<number | null>(null)
   const commentRef = useRef<HTMLTextAreaElement>(null)
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchRapports = async () => {
     setLoading(true)
     try {
-      // Récupérer les rapports de l'encadrant
-      const res = await api.get<Rapport[]>('/rapports')
-      // Filtrer par encadrant connecté
-      const filtered = res.data.filter(r => r.encadrant?.id === Number(userId))
-      setRapports(filtered.length > 0 ? filtered : res.data) // fallback: tous
+      if (userId) {
+        const res = await api.get<Rapport[]>(`/rapports/encadrant/${userId}`)
+        setRapports(res.data)
+      } else {
+        const res = await api.get<Rapport[]>('/rapports')
+        setRapports(res.data)
+      }
     } catch {
       toast.error('Erreur de chargement')
     } finally {
@@ -106,20 +120,27 @@ export default function SupervisorReportsPage() {
 
   useEffect(() => { fetchRapports() }, [])
 
-  // ── Ouvrir un rapport ──────────────────────────────────────────────────────
-  const openRapport = (r: Rapport) => {
+  // ── Ouvrir un rapport ────────────────────────────────────────────────────
+  // ⭐ Modifié — Charger les commentaires depuis l'API
+  const openRapport = async (r: Rapport) => {
     setSelected(r)
     setScore(r.score ?? 0)
     setComment('')
+    // Charger les commentaires
+    try {
+      const res = await api.get(`/commentaires/rapport/${r.id}`)
+      setSelected({ ...r, commentaires: res.data })
+    } catch {
+      setSelected(r)
+    }
   }
 
-  // ── Valider / Rejeter ──────────────────────────────────────────────────────
+  // ── Valider / Rejeter ────────────────────────────────────────────────────
   const handleValider = async (statut: 'VALIDE' | 'REJETE') => {
     if (!selected) return
     setValidating(true)
     try {
       await api.put(`/rapports/${selected.id}/valider`, { statut })
-      // Sauvegarder le score si défini
       if (score > 0) {
         try { await api.put(`/rapports/${selected.id}/score`, { score }) } catch {}
       }
@@ -134,7 +155,7 @@ export default function SupervisorReportsPage() {
     }
   }
 
-  // ── Envoyer commentaire ────────────────────────────────────────────────────
+  // ── Envoyer commentaire ──────────────────────────────────────────────────
   const handleSendComment = async () => {
     if (!selected || !comment.trim()) { toast.error('Écrivez un commentaire'); return }
     setSendingCom(true)
@@ -144,17 +165,15 @@ export default function SupervisorReportsPage() {
         rapportId: selected.id,
         auteurId:  userId,
       })
-      const newCom = res.data
       const updated = {
         ...selected,
-        commentaires: [...(selected.commentaires ?? []), newCom],
+        commentaires: [...(selected.commentaires ?? []), res.data],
       }
       setRapports(prev => prev.map(r => r.id === selected.id ? updated : r))
       setSelected(updated)
       setComment('')
       toast.success('Commentaire envoyé !')
     } catch {
-      // fallback local
       const mock: Commentaire = {
         id: Date.now(),
         contenu: comment,
@@ -174,15 +193,36 @@ export default function SupervisorReportsPage() {
     }
   }
 
-  // ── Export rapport ─────────────────────────────────────────────────────────
+  // ⭐ NOUVEAU — Télécharger le fichier avec JWT token ──────────────────────
+  const handleDownload = async (rapportId: number, fileName: string) => {
+    setDownloadingId(rapportId)
+    try {
+      const response = await api.get(`/rapports/${rapportId}/fichier`, {
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', fileName || 'rapport.pdf')
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success('Fichier téléchargé !')
+    } catch {
+      toast.error('Erreur lors du téléchargement')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
+  // ⭐ MODIFIÉ — Export avec handleDownload au lieu de window.open ──────────
   const handleExport = () => {
     if (!selected) return
-    // Télécharger le fichier si disponible
-    if (selected.fichierUrl) {
-      window.open(`/api/rapports/${selected.id}/fichier`, '_blank')
+    if (selected.fichierNom) {
+      handleDownload(selected.id, selected.fichierNom)
       return
     }
-    // Sinon générer un résumé texte
     const content = [
       `RAPPORT : ${selected.titre}`,
       `Étudiant : ${selected.auteur?.nom ?? '—'}`,
@@ -191,7 +231,6 @@ export default function SupervisorReportsPage() {
       `Score : ${selected.score ?? 'Non noté'}/5`,
       `\n${selected.contenu ?? ''}`,
     ].join('\n')
-
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
@@ -202,10 +241,9 @@ export default function SupervisorReportsPage() {
     toast.success('Rapport exporté !')
   }
 
-  // ── Navigate back ──────────────────────────────────────────────────────────
   const goBack = () => navigate('/supervisor')
 
-  // ── Filtered ───────────────────────────────────────────────────────────────
+  // ── Filtered ─────────────────────────────────────────────────────────────
   const filtered = rapports
     .filter(r => filter === 'ALL' || r.statut === filter)
     .filter(r =>
@@ -219,7 +257,7 @@ export default function SupervisorReportsPage() {
   const valides = rapports.filter(r => r.statut === 'VALIDE').length
   const rejetes = rapports.filter(r => r.statut === 'REJETE').length
 
-  // ── Styles ─────────────────────────────────────────────────────────────────
+  // ── Styles ───────────────────────────────────────────────────────────────
   const bg    = isDark ? 'bg-gray-950' : 'bg-white'
   const card  = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-purple-100'
   const input = isDark
@@ -248,10 +286,9 @@ export default function SupervisorReportsPage() {
               <FileText size={18} className="text-purple-600" />
               Rapports des Étudiants
             </h1>
-            <p className={`text-xs ${muted}`}>{total} rapport{total > 1 ? 's' : ''} · {soumis} en attente de review</p>
+            <p className={`text-xs ${muted}`}>{total} rapport{total > 1 ? 's' : ''} · {soumis} en attente</p>
           </div>
         </div>
-
         {soumis > 0 && (
           <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
             <Clock size={13} /> {soumis} à valider
@@ -261,7 +298,7 @@ export default function SupervisorReportsPage() {
 
       <div className="flex h-[calc(100vh-65px)]">
 
-        {/* ══ Colonne gauche — Liste ═══════════════════════════════════════════ */}
+        {/* ══ Colonne gauche — Liste ══════════════════════════════════════════ */}
         <div className={`w-full lg:w-96 flex flex-col border-r ${isDark ? 'border-gray-800' : 'border-purple-100'} ${selected ? 'hidden lg:flex' : 'flex'}`}>
 
           {/* Stats */}
@@ -345,7 +382,6 @@ export default function SupervisorReportsPage() {
                           rapport.statut === 'VALIDE'  ? 'text-emerald-600' : 'text-red-600'
                         } />
                       </div>
-
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate">{rapport.titre}</p>
                         <p className={`text-xs truncate ${muted}`}>{rapport.auteur?.nom ?? '—'}</p>
@@ -353,13 +389,17 @@ export default function SupervisorReportsPage() {
                           <span className={`text-xs ${muted}`}>
                             {new Date(rapport.dateDepot).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                           </span>
-                          {rapport.fichierNom && <span className="text-xs text-purple-500">📎 {rapport.fichierNom.split('.').pop()?.toUpperCase()}</span>}
+                          {rapport.fichierNom && (
+                            <span className="text-xs text-purple-500">📎 {rapport.fichierNom.split('.').pop()?.toUpperCase()}</span>
+                          )}
+                          {rapport.fichierTaille ? (
+                            <span className={`text-xs ${muted}`}>{formatFileSize(rapport.fichierTaille)}</span>
+                          ) : null}
                           {rapport.score && rapport.score > 0 && (
                             <span className="text-xs text-amber-500 font-bold">⭐ {rapport.score}/5</span>
                           )}
                         </div>
                       </div>
-
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.badge}`}>
                           {cfg.label}
@@ -410,17 +450,17 @@ export default function SupervisorReportsPage() {
                       </p>
                     </div>
                   </div>
-
                   <div className="flex items-center gap-2">
-                    {/* Export */}
-                    <button onClick={handleExport}
-                      className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors ${
+                    {/* ⭐ Export / Download bouton */}
+                    <button onClick={handleExport} disabled={downloadingId === selected.id}
+                      className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors disabled:opacity-50 ${
                         isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-purple-50 hover:bg-purple-100 text-purple-700'
                       }`}>
-                      <FileDown size={13} /> Exporter
+                      {downloadingId === selected.id
+                        ? <Loader2 size={13} className="animate-spin" />
+                        : <FileDown size={13} />}
+                      {selected.fichierNom ? 'Télécharger' : 'Exporter'}
                     </button>
-
-                    {/* Statut badge */}
                     <span className={`text-xs font-semibold px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 ${STATUT[selected.statut].badge}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${STATUT[selected.statut].dot}`} />
                       {STATUT[selected.statut].label}
@@ -449,25 +489,48 @@ export default function SupervisorReportsPage() {
                     )}
                   </div>
 
-                  {/* Fichier joint */}
+                  {/* ⭐ Fichier joint — avec bouton télécharger corrigé */}
                   {selected.fichierNom && (
-                    <div className={`rounded-2xl border ${card} p-4 flex items-center gap-3`}>
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${isDark ? 'bg-gray-800' : 'bg-purple-50'}`}>
-                        📄
+                    <div className={`rounded-2xl border ${card} p-4`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${
+                          selected.fichierType?.includes('pdf') ? 'bg-red-100 dark:bg-red-900/30' :
+                          selected.fichierType?.includes('word') || selected.fichierType?.includes('document') ? 'bg-blue-100 dark:bg-blue-900/30' :
+                          'bg-purple-100 dark:bg-purple-900/30'
+                        }`}>
+                          {selected.fichierType?.includes('pdf') ? '📕' :
+                           selected.fichierType?.includes('word') || selected.fichierType?.includes('document') ? '📘' :
+                           selected.fichierType?.includes('image') ? '🖼️' : '📄'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">{selected.fichierNom}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`text-xs ${muted}`}>
+                              {selected.fichierType?.includes('pdf') ? 'PDF' :
+                               selected.fichierType?.includes('word') || selected.fichierType?.includes('document') ? 'Word' :
+                               selected.fichierNom?.split('.').pop()?.toUpperCase() ?? 'Fichier'}
+                            </span>
+                            {selected.fichierTaille && (
+                              <span className={`text-xs ${muted}`}>· {formatFileSize(selected.fichierTaille)}</span>
+                            )}
+                          </div>
+                        </div>
+                        {/* ⭐ FIX : handleDownload au lieu de window.open */}
+                        <button
+                          onClick={() => handleDownload(selected.id, selected.fichierNom || 'rapport.pdf')}
+                          disabled={downloadingId === selected.id}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl text-white disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
+                          {downloadingId === selected.id
+                            ? <Loader2 size={12} className="animate-spin" />
+                            : <Download size={12} />}
+                          Télécharger
+                        </button>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate">{selected.fichierNom}</p>
-                        <p className={`text-xs ${muted}`}>Fichier joint</p>
-                      </div>
-                      <button onClick={() => window.open(`/api/rapports/${selected.id}/fichier`, '_blank')}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl text-white"
-                        style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
-                        <Download size={12} /> Télécharger
-                      </button>
                     </div>
                   )}
 
-                  {/* Contenu */}
+                  {/* Contenu texte */}
                   {selected.contenu && (
                     <div className={`rounded-2xl border ${card} p-5`}>
                       <p className={`text-xs font-semibold uppercase tracking-wider ${muted} mb-3`}>Contenu du rapport</p>
@@ -477,7 +540,7 @@ export default function SupervisorReportsPage() {
                     </div>
                   )}
 
-                  {/* ── Score ───────────────────────────────────────────────── */}
+                  {/* Score */}
                   <div className={`rounded-2xl border ${card} p-5`}>
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -489,16 +552,8 @@ export default function SupervisorReportsPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-4">
-                      <ScoreStars
-                        value={score}
-                        onChange={setScore}
-                        readonly={selected.statut !== 'SOUMIS' && selected.statut !== 'VALIDE'}
-                      />
-                      {score > 0 && score !== (selected.score ?? 0) && (
-                        <span className={`text-xs ${muted}`}>← modifié</span>
-                      )}
-                    </div>
+                    <ScoreStars value={score} onChange={setScore}
+                      readonly={selected.statut !== 'SOUMIS' && selected.statut !== 'VALIDE'} />
                     <div className="grid grid-cols-5 gap-1 mt-3">
                       {[
                         { n: 1, label: 'Insuffisant', color: 'text-red-500' },
@@ -512,25 +567,21 @@ export default function SupervisorReportsPage() {
                     </div>
                   </div>
 
-                  {/* ── Actions Valider / Rejeter ────────────────────────── */}
+                  {/* Actions Valider / Rejeter */}
                   {selected.statut === 'SOUMIS' && (
                     <div className={`rounded-2xl border ${card} p-5`}>
                       <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
                         <BarChart3 size={15} className="text-purple-500" /> Décision
                       </h3>
                       <div className="flex gap-3">
-                        <motion.button
-                          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                          onClick={() => handleValider('VALIDE')}
-                          disabled={validating}
+                        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                          onClick={() => handleValider('VALIDE')} disabled={validating}
                           className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-white font-semibold text-sm disabled:opacity-60"
                           style={{ background: 'linear-gradient(135deg, #006c48, #059669)' }}>
                           {validating ? <Loader2 size={15} className="animate-spin" /> : <><ThumbsUp size={15} /> Valider</>}
                         </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                          onClick={() => handleValider('REJETE')}
-                          disabled={validating}
+                        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                          onClick={() => handleValider('REJETE')} disabled={validating}
                           className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-white font-semibold text-sm disabled:opacity-60 bg-red-600 hover:bg-red-700 transition-colors">
                           <ThumbsDown size={15} /> Rejeter
                         </motion.button>
@@ -543,14 +594,12 @@ export default function SupervisorReportsPage() {
                     </div>
                   )}
 
-                  {/* ── Commentaires ─────────────────────────────────────── */}
+                  {/* Commentaires */}
                   <div className={`rounded-2xl border ${card} p-5`}>
                     <h3 className="font-semibold text-sm mb-4 flex items-center gap-2">
                       <MessageSquare size={15} className="text-purple-500" />
                       Commentaires ({selected.commentaires?.length ?? 0})
                     </h3>
-
-                    {/* Liste commentaires */}
                     {(selected.commentaires?.length ?? 0) === 0 ? (
                       <p className={`text-sm text-center py-4 ${muted}`}>Aucun commentaire pour l'instant</p>
                     ) : (
@@ -558,29 +607,20 @@ export default function SupervisorReportsPage() {
                         {selected.commentaires?.map(c => (
                           <div key={c.id} className={`p-3 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-purple-50'}`}>
                             <div className="flex items-center justify-between mb-1">
-                              <p className="text-xs font-bold" style={{ color: '#421384' }}>
-                                {c.auteur?.nom ?? 'Encadrant'}
-                              </p>
-                              <p className={`text-xs ${muted}`}>
-                                {new Date(c.dateCreation).toLocaleDateString('fr-FR')}
-                              </p>
+                              <p className="text-xs font-bold" style={{ color: '#421384' }}>{c.auteur?.nom ?? 'Encadrant'}</p>
+                              <p className={`text-xs ${muted}`}>{new Date(c.dateCreation).toLocaleDateString('fr-FR')}</p>
                             </div>
                             <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{c.contenu}</p>
                           </div>
                         ))}
                       </div>
                     )}
-
-                    {/* Zone écriture commentaire */}
                     <div className="flex gap-2">
-                      <textarea
-                        ref={commentRef}
-                        value={comment}
+                      <textarea ref={commentRef} value={comment}
                         onChange={e => setComment(e.target.value)}
                         placeholder="Écrivez un commentaire ou retour pour l'étudiant..."
                         rows={3}
-                        className={`flex-1 text-sm px-4 py-3 border rounded-xl outline-none resize-none transition-all ${input}`}
-                      />
+                        className={`flex-1 text-sm px-4 py-3 border rounded-xl outline-none resize-none transition-all ${input}`} />
                       <button onClick={handleSendComment} disabled={sendingCom || !comment.trim()}
                         className="flex flex-col items-center justify-center gap-1 px-4 rounded-xl text-white font-semibold text-xs disabled:opacity-50 transition-all"
                         style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>

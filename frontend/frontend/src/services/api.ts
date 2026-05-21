@@ -15,13 +15,15 @@ api.interceptors.request.use((config) => {
 })
 
 // ── Gestion des erreurs d'authentification ────────────────────────────────
+// Dans api.ts, trouve cette partie :
 api.interceptors.response.use(
   response => response,
   error => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      localStorage.clear()
-      window.location.href = '/login'
-    }
+    // ❌ SUPPRIME ou COMMENTE ce bloc :
+    // if (error.response?.status === 401 || error.response?.status === 403) {
+    //   localStorage.clear()
+    //   window.location.href = '/login'
+    // }
     return Promise.reject(error)
   }
 )

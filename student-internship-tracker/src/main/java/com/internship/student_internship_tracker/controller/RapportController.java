@@ -1,6 +1,8 @@
 package com.internship.student_internship_tracker.controller;
 
+import com.internship.student_internship_tracker.entity.Commentaire;
 import com.internship.student_internship_tracker.entity.Rapport;
+import com.internship.student_internship_tracker.repository.CommentaireRepository;
 import com.internship.student_internship_tracker.service.FileStorageService;
 import com.internship.student_internship_tracker.service.RapportService;
 import lombok.RequiredArgsConstructor;
@@ -12,11 +14,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
+
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/rapports")
@@ -25,6 +31,7 @@ public class RapportController {
 
     private final RapportService     rapportService;
     private final FileStorageService fileStorageService;
+    private final CommentaireRepository commentaireRepository;
 
     // ── GET tous les rapports ──────────────────────────────────────────────
     @GetMapping
@@ -48,6 +55,24 @@ public class RapportController {
     @GetMapping("/{id}")
     public ResponseEntity<Rapport> getRapportById(@PathVariable Long id) {
         return ResponseEntity.ok(rapportService.getRapportById(id));
+    }
+    @GetMapping("/{id}/commentaires")
+    public ResponseEntity<List<Map<String, Object>>> getCommentaires(@PathVariable Long id) {
+        List<Commentaire> commentaires = commentaireRepository.findByRapportId(id);
+        List<Map<String, Object>> result = commentaires.stream().map(c -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", c.getId());
+            map.put("contenu", c.getContenu());
+            map.put("dateCreation", c.getDateCreation() != null ? c.getDateCreation().toString() : null);
+            if (c.getAuteur() != null) {
+                Map<String, Object> auteurMap = new HashMap<>();
+                auteurMap.put("id", c.getAuteur().getId());
+                auteurMap.put("nom", c.getAuteur().getNom());
+                map.put("auteur", auteurMap);
+            }
+            return map;
+        }).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
     }
 
     // ── POST créer rapport avec fichier (multipart) ────────────────────────

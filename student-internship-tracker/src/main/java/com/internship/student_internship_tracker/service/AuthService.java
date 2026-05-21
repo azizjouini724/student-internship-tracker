@@ -1,6 +1,7 @@
 package com.internship.student_internship_tracker.service;
 
 import com.internship.student_internship_tracker.entity.User;
+import com.internship.student_internship_tracker.entity.Role;
 import com.internship.student_internship_tracker.repository.UserRepository;
 import com.internship.student_internship_tracker.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -50,9 +51,9 @@ public class AuthService {
         }
 
         // 2. Parser le rôle
-        User.Role userRole;
+        Role userRole;
         try {
-            userRole = User.Role.valueOf(role.toUpperCase());
+            userRole = Role.valueOf(role.toUpperCase());
         } catch (IllegalArgumentException e) {
             throw new RuntimeException(
                 "Rôle invalide : " + role + ". Valeurs acceptées : ETUDIANT, ENCADRANT, ADMIN"

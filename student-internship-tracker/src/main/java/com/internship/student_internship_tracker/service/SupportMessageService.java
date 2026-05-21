@@ -2,6 +2,7 @@ package com.internship.student_internship_tracker.service;
 
 import com.internship.student_internship_tracker.entity.SupportMessage;
 import com.internship.student_internship_tracker.entity.User;
+import com.internship.student_internship_tracker.entity.Role;
 import com.internship.student_internship_tracker.repository.SupportMessageRepository;
 import com.internship.student_internship_tracker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -41,7 +42,7 @@ public class SupportMessageService {
 
         // Notifier tous les admins
         userRepository.findAll().stream()
-            .filter(u -> u.getRole() == User.Role.ADMIN)
+            .filter(u -> u.getRole() == Role.ADMIN)
             .forEach(admin ->
                 notificationService.createNotification(
                     "Nouveau message support",

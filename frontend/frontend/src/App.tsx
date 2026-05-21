@@ -18,7 +18,13 @@ import NotificationsPage from './pages/NotificationsPage'
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   const { token } = useAuthStore()
-  return token ? children : <Navigate to="/login" />
+  
+  // ✅ FIX : Si pas de token, redirect avec replace=true pour vider l'historique
+  if (!token) {
+    return <Navigate to="/login" replace />
+  }
+  
+  return children
 }
 
 function App() {

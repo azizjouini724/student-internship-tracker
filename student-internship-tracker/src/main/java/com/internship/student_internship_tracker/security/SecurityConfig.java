@@ -1,9 +1,10 @@
 package com.internship.student_internship_tracker.security;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -21,51 +22,31 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Autowired
-    private JwtAuthFilter jwtAuthFilter;
+    private final JwtAuthFilter jwtAuthFilter;
+
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        System.out.println("═══════════════════════════════════════════");
-        System.out.println("🔒 CHARGEMENT SecurityConfig");
-        System.out.println("═══════════════════════════════════════════");
-        
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> {
-                System.out.println("✓ CSRF désactivé");
-                csrf.disable();
-            })
-            .cors(cors -> {
-                System.out.println("✓ CORS activé");
-                cors.configurationSource(corsConfigurationSource());
-            })
-            .sessionManagement(session -> {
-                System.out.println("✓ Session STATELESS");
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS);
-            })
-            .authorizeHttpRequests(auth -> {
-                System.out.println("📋 Configuration des autorisations :");
-                System.out.println("  ✓ OPTIONS /** → PUBLIC");
-                System.out.println("  ✓ /api/auth/login → PUBLIC");
-                System.out.println("  ✓ /api/auth/register → PUBLIC (temporaire)");
-                System.out.println("  ✓ /graphql → PUBLIC");
-                System.out.println("  ✓ /uploads/** → PUBLIC");
-                System.out.println("  ✓ Reste → AUTHENTICATED");
-                
-                auth
-                    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                    .requestMatchers("/api/auth/login").permitAll()
-                    .requestMatchers("/api/auth/register").permitAll()  // Temporaire pour debug
-                    .requestMatchers("/graphql", "/graphiql/**").permitAll()
-                    .requestMatchers("/uploads/**").permitAll()
-                    .anyRequest().authenticated();
-            })
+            .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/api/auth/login").permitAll()
+                .requestMatchers("/api/auth/register").permitAll()
+                .requestMatchers("/graphql", "/graphiql/**").permitAll()
+                .requestMatchers("/error").permitAll()
+                .requestMatchers("/uploads/**").permitAll()
+                // ❌ SUPPRIMÉ : .requestMatchers("/api/users/encadrant/**").authenticated()
+                // ✅ anyRequest().authenticated() gère déjà TOUT le reste si le token JWT est valide
+                .anyRequest().authenticated()
+            )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
-        System.out.println("═══════════════════════════════════════════");
-        System.out.println("✅ SecurityConfig CHARGÉ AVEC SUCCÈS");
-        System.out.println("═══════════════════════════════════════════");
-        
         return http.build();
     }
 
@@ -76,7 +57,8 @@ public class SecurityConfig {
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
-        
+        configuration.setExposedHeaders(List.of("Authorization"));
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
@@ -84,7 +66,11 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        System.out.println("🔐 BCryptPasswordEncoder créé");
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
     }
 }

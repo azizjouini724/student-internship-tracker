@@ -5,7 +5,8 @@ import {
   Clock, CheckCircle, XCircle, AlertCircle,
   ChevronDown, Eye, Send, BookOpen, Calendar,
   ArrowLeft, Loader2, Upload,
-  Trash2, Download, Archive, Image, Paperclip, MessageSquare
+  Trash2, Download, Archive, Image, Paperclip, MessageSquare,
+  UserCheck
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
@@ -18,6 +19,9 @@ interface Rapport {
   contenu?: string
   fichierUrl?: string
   fichierNom?: string
+  fichierChemin?: string
+  fichierType?: string
+  fichierTaille?: number
   statut: 'SOUMIS' | 'VALIDE' | 'REJETE'
   dateDepot: string
   encadrant?: { id: number; nom: string }
@@ -25,10 +29,13 @@ interface Rapport {
   commentaires?: { id: number; contenu: string; auteur: { nom: string }; dateCreation: string }[]
 }
 
-interface Encadrant {
+interface Demande {
   id: number
-  nom: string
-  email: string
+  statut: 'EN_ATTENTE' | 'ACCEPTE' | 'REFUSE'
+  encadrant?: { id: number; nom: string; email: string }
+  etudiant?: { id: number; nom: string }
+  message: string
+  dateDemande: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -47,12 +54,12 @@ const MAX_SIZE_MB  = 20
 
 const getFileIcon = (name: string) => {
   const ext = name.split('.').pop()?.toLowerCase()
-  if (ext === 'pdf') return 'FileText'
-  if (['doc','docx'].includes(ext ?? '')) return 'FileText'
-  if (['ppt','pptx'].includes(ext ?? '')) return 'FileText'
-  if (['zip','rar'].includes(ext ?? '')) return 'Archive'
-  if (['png','jpg','jpeg'].includes(ext ?? '')) return 'Image'
-  return 'Paperclip'
+  if (ext === 'pdf') return '📕'
+  if (['doc','docx'].includes(ext ?? '')) return '📘'
+  if (['ppt','pptx'].includes(ext ?? '')) return '📙'
+  if (['zip','rar'].includes(ext ?? '')) return '📦'
+  if (['png','jpg','jpeg'].includes(ext ?? '')) return '🖼️'
+  return '📄'
 }
 
 const formatSize = (bytes: number) => {
@@ -61,7 +68,7 @@ const formatSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
 }
 
-// ─── Statut config ─────────────────────────────────────────────────────────────
+// ─── Statut config ────────────────────────────────────────────────────────────
 const STATUT_CONFIG = {
   SOUMIS: {
     label: 'En attente',
@@ -93,33 +100,47 @@ export default function ReportsPage() {
   const userId    = localStorage.getItem('userId')
   const nom       = localStorage.getItem('nom') ?? 'Étudiant'
 
-  // ── Data ───────────────────────────────────────────────────────────────────
+  // ── Data ─────────────────────────────────────────────────────────────────
   const [rapports,   setRapports]   = useState<Rapport[]>([])
-  const [encadrants, setEncadrants] = useState<Encadrant[]>([])
   const [loading,    setLoading]    = useState(true)
 
-  // ── Filters ────────────────────────────────────────────────────────────────
+  // ⭐ Encadrant accepté automatiquement
+  const [monEncadrant, setMonEncadrant] = useState<{ id: number; nom: string; email: string } | null>(null)
+  const [demandeEnAttente, setDemandeEnAttente] = useState<Demande | null>(null)
+  const [loadingEncadrant, setLoadingEncadrant] = useState(true)
+
+  // ── Filters ──────────────────────────────────────────────────────────────
   const [search,     setSearch]     = useState('')
   const [filterStat, setFilterStat] = useState<'ALL'|'SOUMIS'|'VALIDE'|'REJETE'>('ALL')
 
-  // ── Modal ──────────────────────────────────────────────────────────────────
+  // ── Modal ────────────────────────────────────────────────────────────────
   const [showModal,  setShowModal]  = useState(false)
   const [step,       setStep]       = useState<1|2>(1)
   const [submitting, setSubmitting] = useState(false)
   const [dragOver,   setDragOver]   = useState(false)
 
-  // ── Form state ─────────────────────────────────────────────────────────────
+  // ── Form state ───────────────────────────────────────────────────────────
   const [titre,        setTitre]        = useState('')
-  const [encadrantId,  setEncadrantId]  = useState('')
   const [fichier,      setFichier]      = useState<File | null>(null)
   const [uploadPct,    setUploadPct]    = useState(0)
 
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // ── Detail drawer ──────────────────────────────────────────────────────────
+  // ── Detail drawer ────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Rapport | null>(null)
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // ⭐ Ouvrir un rapport et charger ses commentaires
+  const openRapport = async (rapport: Rapport) => {
+    setSelected(rapport)
+    try {
+      const res = await api.get(`/commentaires/rapport/${rapport.id}`)
+      setSelected({ ...rapport, commentaires: res.data })
+    } catch {
+      setSelected(rapport)
+    }
+  }
+
+  // ── Fetch rapports ───────────────────────────────────────────────────────
   const fetchRapports = async () => {
     setLoading(true)
     try {
@@ -128,7 +149,7 @@ export default function ReportsPage() {
     } catch {
       try {
         const res = await api.get<Rapport[]>('/rapports')
-        setRapports(res.data)
+        setRapports(res.data.filter(r => r.auteur?.id === Number(userId)))
       } catch {
         toast.error('Impossible de charger les rapports')
       }
@@ -137,16 +158,33 @@ export default function ReportsPage() {
     }
   }
 
-  const fetchEncadrants = async () => {
+  // ⭐ Fetch l'encadrant accepté automatiquement
+  const fetchMonEncadrant = async () => {
+    setLoadingEncadrant(true)
     try {
-      const res = await api.get('/users')
-      setEncadrants(res.data.filter((u: any) => u.role === 'ENCADRANT'))
-    } catch { /* silently fail */ }
+      const res = await api.get<Demande[]>(`/demandes/etudiant/${userId}`)
+      const acceptee = res.data.find(d => d.statut === 'ACCEPTE')
+      const enAttente = res.data.find(d => d.statut === 'EN_ATTENTE')
+
+      if (acceptee?.encadrant) {
+        setMonEncadrant(acceptee.encadrant)
+      }
+      if (enAttente) {
+        setDemandeEnAttente(enAttente)
+      }
+    } catch {
+      console.error('Erreur chargement encadrant')
+    } finally {
+      setLoadingEncadrant(false)
+    }
   }
 
-  useEffect(() => { fetchRapports(); fetchEncadrants() }, [])
+  useEffect(() => {
+    fetchRapports()
+    fetchMonEncadrant()
+  }, [])
 
-  // ── File selection ─────────────────────────────────────────────────────────
+  // ── File selection ───────────────────────────────────────────────────────
   const handleFile = (file: File) => {
     if (!ACCEPTED_TYPES.includes(file.type) && file.type !== '') {
       toast.error('Format non supporté. Utilisez PDF, Word, PPT, ZIP ou image.')
@@ -171,10 +209,14 @@ export default function ReportsPage() {
     if (f) handleFile(f)
   }
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  // ── Submit ───────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!titre.trim()) { toast.error('Le titre est requis'); return }
     if (!fichier)       { toast.error('Veuillez joindre un fichier'); return }
+    if (!monEncadrant) {
+      toast.error('Vous devez avoir un encadrant accepté pour soumettre un rapport')
+      return
+    }
 
     setSubmitting(true)
     setUploadPct(0)
@@ -183,7 +225,7 @@ export default function ReportsPage() {
       const formData = new FormData()
       formData.append('titre',       titre)
       formData.append('auteurId',    userId ?? '')
-      formData.append('encadrantId', encadrantId)
+      formData.append('encadrantId', String(monEncadrant.id))
       formData.append('fichier',     fichier)
 
       const res = await api.post<Rapport>('/rapports', formData, {
@@ -193,34 +235,56 @@ export default function ReportsPage() {
         },
       })
       setRapports(prev => [res.data, ...prev])
-      toast.success('Rapport soumis avec succès !')
+      toast.success('Rapport soumis avec succès à ' + monEncadrant.nom + ' !')
       closeModal()
     } catch (err: any) {
-      // Fallback mock pour dev sans backend
-      const mock: Rapport = {
-        id: Date.now(),
-        titre,
-        fichierNom: fichier.name,
-        statut: 'SOUMIS',
-        dateDepot: new Date().toISOString(),
-        encadrant: encadrants.find(e => String(e.id) === encadrantId),
-      }
-      setRapports(prev => [mock, ...prev])
-      toast.success('Rapport soumis !')
-      closeModal()
+      const errorMsg = err.response?.data?.error || 'Erreur lors de la soumission'
+      toast.error(errorMsg)
     } finally {
       setSubmitting(false)
       setUploadPct(0)
     }
   }
 
-  const openModal  = () => { setShowModal(true); setStep(1) }
-  const closeModal = () => {
-    setShowModal(false); setStep(1)
-    setTitre(''); setEncadrantId(''); setFichier(null)
+  const openModal = () => {
+    if (!monEncadrant) {
+      if (demandeEnAttente) {
+        toast.error('Votre demande d\'encadrement est en attente. Attendez la réponse avant de soumettre.')
+      } else {
+        toast.error('Vous devez avoir un encadrant accepté pour soumettre un rapport.')
+      }
+      return
+    }
+    setShowModal(true)
+    setStep(1)
   }
 
-  // ── Filtered ───────────────────────────────────────────────────────────────
+  const closeModal = () => {
+    setShowModal(false); setStep(1)
+    setTitre(''); setFichier(null)
+  }
+
+  // ── Download fichier ──────────────────────────────────────────────────────
+  const handleDownload = async (rapportId: number, fileName: string) => {
+    try {
+      const response = await api.get(`/rapports/${rapportId}/fichier`, {
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', fileName || 'rapport.pdf')
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success('Fichier téléchargé !')
+    } catch {
+      toast.error('Erreur lors du téléchargement')
+    }
+  }
+
+  // ── Filtered ─────────────────────────────────────────────────────────────
   const filtered = rapports
     .filter(r => filterStat === 'ALL' || r.statut === filterStat)
     .filter(r => r.titre.toLowerCase().includes(search.toLowerCase()))
@@ -240,7 +304,7 @@ export default function ReportsPage() {
     <div className={`min-h-screen ${bg} ${isDark ? 'text-gray-100' : 'text-gray-900'} font-sans`}>
       <Toaster position="top-right" richColors />
 
-      {/* ── Topbar ──────────────────────────────────────────────────────────── */}
+      {/* ── Topbar ────────────────────────────────────────────────────────── */}
       <motion.header
         initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
         className={`sticky top-0 z-30 flex items-center justify-between px-6 py-4 border-b ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
@@ -259,8 +323,11 @@ export default function ReportsPage() {
         <motion.button
           whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
           onClick={openModal}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-lg"
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-lg ${
+            !monEncadrant ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
           style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
+          title={!monEncadrant ? 'Vous devez avoir un encadrant accepté' : ''}
         >
           <Plus size={16} /> Nouvelle soumission
         </motion.button>
@@ -268,7 +335,57 @@ export default function ReportsPage() {
 
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
 
-        {/* ── Stats ─────────────────────────────────────────────────────────── */}
+        {/* ⭐ Bannière encadrant */}
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+          {loadingEncadrant ? (
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
+              <Loader2 size={16} className="animate-spin text-purple-500" />
+              <span className={`text-sm ${muted}`}>Chargement des informations d'encadrement...</span>
+            </div>
+          ) : monEncadrant ? (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+              <UserCheck size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                  Encadrant : <span className="font-bold">{monEncadrant.nom}</span>
+                </p>
+                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+                  Vos rapports seront automatiquement envoyés à cet encadrant
+                </p>
+              </div>
+            </div>
+          ) : demandeEnAttente ? (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <AlertCircle size={18} className="text-amber-600 dark:text-amber-400 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                  Demande en attente auprès de {demandeEnAttente.encadrant?.nom}
+                </p>
+                <p className="text-xs text-amber-600/70 dark:text-amber-400/70">
+                  Vous pourrez soumettre des rapports dès que votre demande sera acceptée.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+              <AlertCircle size={18} className="text-red-600 dark:text-red-400 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-700 dark:text-red-400">
+                  Aucun encadrant assigné
+                </p>
+                <p className="text-xs text-red-600/70 dark:text-red-400/70">
+                  Faites une demande d'encadrement depuis le dashboard avant de soumettre des rapports.
+                </p>
+              </div>
+              <button onClick={() => navigate('/student')}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 transition-colors">
+                Demander
+              </button>
+            </div>
+          )}
+        </motion.div>
+
+        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { label: 'Total',      val: total,  icon: FileText,    iconCl: 'text-gray-400',    bg2: isDark ? 'bg-gray-800' : 'bg-white',              color: isDark ? 'text-gray-100' : 'text-gray-800' },
@@ -278,8 +395,7 @@ export default function ReportsPage() {
           ].map(({ label, val, icon: Icon, iconCl, bg2, color }, i) => (
             <motion.div key={label}
               initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
-              className={`${bg2} rounded-2xl p-4 border ${isDark ? 'border-gray-800' : 'border-gray-200'} shadow-sm flex items-center gap-3`}
-            >
+              className={`${bg2} rounded-2xl p-4 border ${isDark ? 'border-gray-800' : 'border-gray-200'} shadow-sm flex items-center gap-3`}>
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isDark ? 'bg-gray-700/50' : 'bg-white'} shadow-sm`}>
                 <Icon size={16} className={iconCl} />
               </div>
@@ -300,27 +416,23 @@ export default function ReportsPage() {
               <span className="text-sm font-bold text-emerald-600">{taux}%</span>
             </div>
             <div className={`w-full h-2 rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-              <motion.div
-                initial={{ width: 0 }} animate={{ width: `${taux}%` }}
+              <motion.div initial={{ width: 0 }} animate={{ width: `${taux}%` }}
                 transition={{ duration: 0.8, ease: 'easeOut', delay: 0.4 }}
-                className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-emerald-500"
-              />
+                className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-emerald-500" />
             </div>
           </motion.div>
         )}
 
-        {/* ── Filtres ───────────────────────────────────────────────────────── */}
+        {/* Filtres */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
           className="flex flex-col sm:flex-row gap-3">
           <div className={`flex items-center gap-2 flex-1 px-3 py-2.5 rounded-xl border ${isDark ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'}`}>
             <Search size={15} className={muted} />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher un rapport..."
-              className={`flex-1 text-sm bg-transparent outline-none ${isDark ? 'text-gray-100 placeholder-gray-500' : 'text-gray-900 placeholder-gray-400'}`}
-            />
+              className={`flex-1 text-sm bg-transparent outline-none ${isDark ? 'text-gray-100 placeholder-gray-500' : 'text-gray-900 placeholder-gray-400'}`} />
             {search && <button onClick={() => setSearch('')}><X size={14} className={muted} /></button>}
           </div>
-
           <div className={`flex items-center gap-1 p-1 rounded-xl ${isDark ? 'bg-gray-900 border border-gray-800' : 'bg-white border border-gray-200'}`}>
             {(['ALL','SOUMIS','VALIDE','REJETE'] as const).map(s => (
               <button key={s} onClick={() => setFilterStat(s)}
@@ -338,47 +450,43 @@ export default function ReportsPage() {
           </div>
         </motion.div>
 
-        {/* ── Liste ─────────────────────────────────────────────────────────── */}
+        {/* Liste */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-              className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <Loader2 size={28} className="animate-spin text-purple-500" />
           </div>
         ) : filtered.length === 0 ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className={`rounded-2xl border ${card} p-16 text-center shadow-sm`}>
-            <div className="flex justify-center mb-3">
-              <FileText size={48} className={isDark ? 'text-gray-700' : 'text-gray-300'} />
-            </div>
+            <FileText size={48} className={`mx-auto mb-3 ${isDark ? 'text-gray-700' : 'text-gray-300'}`} />
             <p className="font-semibold text-lg mb-1">Aucun rapport trouvé</p>
             <p className={`text-sm ${muted} mb-6`}>
               {rapports.length === 0
                 ? 'Commencez par soumettre votre premier rapport de stage.'
                 : 'Aucun rapport ne correspond à votre recherche.'}
             </p>
-            <button onClick={openModal}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
-              style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}>
-              <Plus size={15} /> Nouvelle soumission
-            </button>
+            {monEncadrant && (
+              <button onClick={openModal}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
+                style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}>
+                <Plus size={15} /> Nouvelle soumission
+              </button>
+            )}
           </motion.div>
         ) : (
           <div className="space-y-3">
             {filtered.map((rapport, i) => {
-              const cfg  = STATUT_CONFIG[rapport.statut]
+              const cfg = STATUT_CONFIG[rapport.statut]
               const Icon = cfg.icon
-              const fileIcon = rapport.fichierNom ? getFileIcon(rapport.fichierNom) : 'FileText'
               return (
                 <motion.div key={rapport.id}
                   initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.06 }}
                   whileHover={{ x: 3, transition: { duration: 0.15 } }}
                   className={`rounded-2xl border-l-4 ${cfg.card} border ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'} p-5 shadow-sm cursor-pointer`}
-                  onClick={() => setSelected(rapport)}
-                >
+                  onClick={() => openRapport(rapport)}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
-                      {/* Icône statut */}
                       <div className={`mt-0.5 w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                         rapport.statut === 'VALIDE' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
                         rapport.statut === 'REJETE' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-blue-100 dark:bg-blue-900/30'
@@ -388,49 +496,33 @@ export default function ReportsPage() {
                           rapport.statut === 'REJETE' ? 'text-red-600' : 'text-blue-600'
                         } />
                       </div>
-
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-sm truncate">{rapport.titre}</h3>
-
-                        {/* Fichier joint */}
                         {rapport.fichierNom && (
                           <div className={`inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                            {(() => {
-                              const IconMap: Record<string, any> = { FileText, Archive, Image, Paperclip }
-                              const iconName = fileIcon as keyof typeof IconMap
-                              const FileTypeIcon = IconMap[iconName] || FileText
-                              return <FileTypeIcon size={13} />
-                            })()}
-                            <span className="truncate max-w-[180px]">{rapport.fichierNom}</span>
+                            📎 <span className="truncate max-w-[180px]">{rapport.fichierNom}</span>
                           </div>
                         )}
-
                         <div className="flex items-center gap-3 mt-2 flex-wrap">
                           <span className={`text-xs flex items-center gap-1 ${muted}`}>
                             <Calendar size={11} />
-                            {rapport.dateDepot
-                              ? new Date(rapport.dateDepot).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
-                              : '—'}
+                            {rapport.dateDepot ? new Date(rapport.dateDepot).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                           </span>
                           {rapport.encadrant && (
                             <span className={`text-xs flex items-center gap-1 ${muted}`}>
                               <BookOpen size={11} /> {rapport.encadrant.nom}
                             </span>
                           )}
-                          {rapport.commentaires && rapport.commentaires.length > 0 && (
+                          {(rapport.commentaires?.length ?? 0) > 0 && (
                             <span className={`text-xs flex items-center gap-1 ${muted}`}>
-                              <MessageSquare size={11} />
-                              {rapport.commentaires.length} commentaire{rapport.commentaires.length > 1 ? 's' : ''}
+                              <MessageSquare size={11} /> {rapport.commentaires.length}
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
-
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.badge}`}>
-                        {cfg.label}
-                      </span>
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.badge}`}>{cfg.label}</span>
                       <Eye size={15} className={muted} />
                     </div>
                   </div>
@@ -441,22 +533,20 @@ export default function ReportsPage() {
         )}
       </div>
 
-      {/* ══ Modal Nouvelle Soumission ══════════════════════════════════════════ */}
+      {/* ══ Modal Nouvelle Soumission ════════════════════════════════════════ */}
       <AnimatePresence>
         {showModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)' }}
-            onClick={closeModal}
-          >
+            onClick={closeModal}>
             <motion.div
               initial={{ opacity: 0, scale: 0.92, y: 24 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 24 }}
               transition={{ type: 'spring', damping: 28 }}
               className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-white'}`}
-              onClick={e => e.stopPropagation()}
-            >
+              onClick={e => e.stopPropagation()}>
               {/* Header */}
               <div className="flex items-center justify-between px-6 pt-6 pb-4"
                 style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>
@@ -478,7 +568,7 @@ export default function ReportsPage() {
                 </button>
               </div>
 
-              {/* Steps */}
+              {/* Steps indicator */}
               <div className="flex items-center px-6 py-3 gap-2">
                 {[1, 2].map(s => (
                   <div key={s} className="flex items-center gap-2 flex-1">
@@ -499,8 +589,8 @@ export default function ReportsPage() {
                   {step === 1 ? (
                     <motion.div key="step1"
                       initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-                      className="space-y-4"
-                    >
+                      className="space-y-4">
+
                       {/* Titre */}
                       <div>
                         <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>
@@ -508,42 +598,43 @@ export default function ReportsPage() {
                         </label>
                         <input type="text" value={titre} onChange={e => setTitre(e.target.value)}
                           placeholder="Ex: Rapport de stage — Semaine 3"
-                          className={`w-full text-sm px-4 py-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500 transition-all ${input}`}
-                        />
+                          className={`w-full text-sm px-4 py-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500 transition-all ${input}`} />
                       </div>
 
-                      {/* Encadrant */}
+                      {/* ⭐ Encadrant AUTO-REMPLI */}
                       <div>
                         <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>
-                          Encadrant (optionnel)
+                          Encadrant
                         </label>
-                        <div className="relative">
-                          <select value={encadrantId} onChange={e => setEncadrantId(e.target.value)}
-                            className={`w-full text-sm px-4 py-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500 appearance-none transition-all ${input}`}>
-                            <option value="">Sélectionner un encadrant</option>
-                            {encadrants.map(enc => (
-                              <option key={enc.id} value={enc.id}>{enc.nom}</option>
-                            ))}
-                          </select>
-                          <ChevronDown size={15} className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${muted}`} />
+                        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+                          isDark ? 'bg-emerald-900/20 border-emerald-800' : 'bg-emerald-50 border-emerald-200'
+                        }`}>
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
+                            style={{ background: 'linear-gradient(135deg, #006c48, #059669)' }}>
+                            {monEncadrant?.nom?.charAt(0) ?? 'E'}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                              {monEncadrant?.nom ?? '—'}
+                            </p>
+                            <p className={`text-xs ${muted}`}>
+                              Le rapport sera envoyé automatiquement à cet encadrant
+                            </p>
+                          </div>
+                          <UserCheck size={16} className="text-emerald-500 ml-auto shrink-0" />
                         </div>
                       </div>
 
-                      {/* ── Zone upload fichier ─────────────────────────── */}
+                      {/* Zone upload fichier */}
                       <div>
                         <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>
                           Fichier du rapport *
                         </label>
-
-                        {/* Input caché */}
                         <input ref={fileRef} type="file" accept={ACCEPTED_EXT} className="hidden" onChange={onFileInput} />
 
-                        {/* Fichier déjà sélectionné */}
                         {fichier ? (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                            className={`flex items-center gap-3 p-4 rounded-xl border-2 border-blue-400 ${isDark ? 'bg-blue-900/20' : 'bg-blue-50'}`}
-                          >
+                          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                            className={`flex items-center gap-3 p-4 rounded-xl border-2 border-blue-400 ${isDark ? 'bg-blue-900/20' : 'bg-blue-50'}`}>
                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm shrink-0`}>
                               {getFileIcon(fichier.name)}
                             </div>
@@ -563,7 +654,6 @@ export default function ReportsPage() {
                             </div>
                           </motion.div>
                         ) : (
-                          /* Drop zone */
                           <motion.div
                             animate={{ borderColor: dragOver ? '#3b82f6' : isDark ? '#374151' : '#d1d5db' }}
                             onDragOver={e => { e.preventDefault(); setDragOver(true) }}
@@ -574,8 +664,7 @@ export default function ReportsPage() {
                               dragOver
                                 ? isDark ? 'bg-blue-900/20 border-blue-500' : 'bg-blue-50 border-blue-400'
                                 : isDark ? 'border-gray-700 hover:border-gray-600 hover:bg-gray-800/50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-                            }`}
-                          >
+                            }`}>
                             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
                               dragOver ? 'bg-blue-500 scale-110' : isDark ? 'bg-gray-800' : 'bg-gray-100'
                             }`}>
@@ -588,8 +677,6 @@ export default function ReportsPage() {
                               <p className={`text-xs mt-1 ${muted}`}>PDF, Word, PowerPoint, ZIP, Image</p>
                               <p className={`text-xs mt-0.5 ${muted}`}>Max {MAX_SIZE_MB} Mo</p>
                             </div>
-
-                            {/* Formats visuels */}
                             <div className="flex items-center gap-2 mt-1">
                               {[
                                 { ext: 'PDF', color: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
@@ -605,37 +692,35 @@ export default function ReportsPage() {
                         )}
                       </div>
 
-                      <button
-                        onClick={() => {
-                          if (!titre.trim()) { toast.error('Le titre est requis'); return }
-                          if (!fichier) { toast.error('Veuillez joindre un fichier'); return }
-                          setStep(2)
-                        }}
-                        className="w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2"
-                        style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
-                      >
+                      <button onClick={() => {
+                        if (!titre.trim()) { toast.error('Le titre est requis'); return }
+                        if (!fichier) { toast.error('Veuillez joindre un fichier'); return }
+                        setStep(2)
+                      }} className="w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2"
+                        style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}>
                         Vérifier avant de soumettre →
                       </button>
                     </motion.div>
                   ) : (
                     <motion.div key="step2"
                       initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-                      className="space-y-4"
-                    >
-                      {/* Récap */}
+                      className="space-y-4">
+
+                      {/* Récapitulatif */}
                       <div className={`rounded-xl p-4 space-y-3 ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
                         <div>
                           <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Titre</p>
                           <p className="text-sm font-semibold mt-0.5">{titre}</p>
                         </div>
-                        {encadrantId && (
-                          <div>
-                            <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Encadrant</p>
-                            <p className="text-sm font-medium mt-0.5">
-                              {encadrants.find(e => String(e.id) === encadrantId)?.nom ?? '—'}
+                        <div>
+                          <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Encadrant</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <UserCheck size={14} className="text-emerald-500" />
+                            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                              {monEncadrant?.nom ?? '—'}
                             </p>
                           </div>
-                        )}
+                        </div>
                         {fichier && (
                           <div>
                             <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Fichier joint</p>
@@ -658,10 +743,8 @@ export default function ReportsPage() {
                             <span className="font-semibold text-blue-600">{uploadPct}%</span>
                           </div>
                           <div className={`w-full h-2 rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                            <motion.div
-                              animate={{ width: `${uploadPct}%` }}
-                              className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"
-                            />
+                            <motion.div animate={{ width: `${uploadPct}%` }}
+                              className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500" />
                           </div>
                         </div>
                       )}
@@ -669,7 +752,7 @@ export default function ReportsPage() {
                       {/* Avertissement */}
                       <div className={`flex items-start gap-2 text-xs px-3 py-2.5 rounded-xl ${isDark ? 'bg-amber-900/20 text-amber-400' : 'bg-amber-50 text-amber-700'}`}>
                         <AlertCircle size={13} className="mt-0.5 shrink-0" />
-                        Une fois soumis, le rapport ne pourra plus être modifié. Il sera transmis à votre encadrant.
+                        Une fois soumis, le rapport sera transmis à <strong className="mx-0.5">{monEncadrant?.nom}</strong> et ne pourra plus être modifié.
                       </div>
 
                       <div className="flex gap-2">
@@ -694,7 +777,7 @@ export default function ReportsPage() {
         )}
       </AnimatePresence>
 
-      {/* ══ Drawer détail ══════════════════════════════════════════════════════ */}
+      {/* ══ Drawer détail ════════════════════════════════════════════════════ */}
       <AnimatePresence>
         {selected && (
           <>
@@ -703,8 +786,7 @@ export default function ReportsPage() {
             <motion.div
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 30 }}
-              className={`fixed right-0 top-0 bottom-0 z-50 w-full max-w-md ${isDark ? 'bg-gray-900' : 'bg-white'} shadow-2xl flex flex-col`}
-            >
+              className={`fixed right-0 top-0 bottom-0 z-50 w-full max-w-md ${isDark ? 'bg-gray-900' : 'bg-white'} shadow-2xl flex flex-col`}>
               <div className="flex items-center justify-between px-6 py-5"
                 style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>
                 <div className="flex items-center gap-2">
@@ -743,7 +825,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* Fichier joint */}
+                {/* Fichier joint avec bouton télécharger */}
                 {selected.fichierNom && (
                   <div>
                     <p className={`text-xs font-semibold uppercase tracking-wider ${muted} mb-2`}>Fichier soumis</p>
@@ -752,28 +834,31 @@ export default function ReportsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{selected.fichierNom}</p>
                       </div>
-                      {selected.fichierUrl && (
-                        <a href={selected.fichierUrl} target="_blank" rel="noopener noreferrer"
-                          className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 hover:bg-blue-200 transition-colors">
-                          <Download size={14} />
-                        </a>
-                      )}
+                      <button onClick={() => handleDownload(selected.id, selected.fichierNom || 'rapport.pdf')}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 hover:bg-blue-200 transition-colors">
+                        <Download size={14} />
+                      </button>
                     </div>
                   </div>
                 )}
 
-                {/* Commentaires */}
+                {/* ⭐ Commentaires — chargés via openRapport */}
                 {selected.commentaires && selected.commentaires.length > 0 && (
                   <div>
                     <p className={`text-xs font-semibold uppercase tracking-wider ${muted} mb-2`}>
-                      Commentaires ({selected.commentaires.length})
+                      <MessageSquare size={12} className="inline mr-1" />
+                      Commentaires de l'encadrant ({selected.commentaires.length})
                     </p>
                     <div className="space-y-2">
                       {selected.commentaires.map(c => (
-                        <div key={c.id} className={`rounded-xl p-3 ${isDark ? 'bg-gray-800' : 'bg-blue-50'}`}>
+                        <div key={c.id} className={`rounded-xl p-3 ${isDark ? 'bg-gray-800' : 'bg-purple-50'}`}>
                           <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">{c.auteur.nom}</p>
-                            <p className={`text-xs ${muted}`}>{new Date(c.dateCreation).toLocaleDateString('fr-FR')}</p>
+                            <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                              {c.auteur?.nom ?? 'Encadrant'}
+                            </p>
+                            <p className={`text-xs ${muted}`}>
+                              {c.dateCreation ? new Date(c.dateCreation).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                            </p>
                           </div>
                           <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{c.contenu}</p>
                         </div>

@@ -19,6 +19,7 @@ interface Deadline {
   dateLimite?: string
   dateEcheance?: string
   statut?: 'ACTIVE' | 'EXPIREE' | 'BIENTOT'
+  encadrant?: { id: number; nom: string }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ const STATUT_CONFIG = {
 export default function SupervisorDeadlinesPage() {
   const navigate  = useNavigate()
   const isDark    = localStorage.getItem('theme') === 'dark'
+  const userId    = Number(localStorage.getItem('userId'))  // ⭐ AJOUT
 
   // ── Data ───────────────────────────────────────────────────────────────────
   const [deadlines, setDeadlines] = useState<Deadline[]>([])
@@ -75,7 +77,8 @@ export default function SupervisorDeadlinesPage() {
   const fetchDeadlines = async () => {
     setLoading(true)
     try {
-      const res = await api.get<Deadline[]>('/deadlines')
+      // ⭐ FIX : Récupérer SEULEMENT les deadlines de CET encadrant
+      const res = await api.get<Deadline[]>(`/deadlines/encadrant/${userId}`)
       setDeadlines(res.data)
     } catch {
       toast.error('Erreur de chargement')
@@ -84,7 +87,7 @@ export default function SupervisorDeadlinesPage() {
     }
   }
 
-  useEffect(() => { fetchDeadlines() }, [])
+  useEffect(() => { fetchDeadlines() }, [userId])
 
   // ── Open modal ─────────────────────────────────────────────────────────────
   const openAdd = () => {
@@ -116,6 +119,7 @@ export default function SupervisorDeadlinesPage() {
         titre:       form.titre,
         dateLimite:  form.dateLimite,
         description: form.description,
+        encadrantId: String(userId),   // ⭐ FIX : Lier la deadline à l'encadrant
       }
 
       if (editTarget) {
@@ -142,6 +146,7 @@ export default function SupervisorDeadlinesPage() {
           titre: form.titre, type: form.titre,
           dateLimite: form.dateLimite,
           description: form.description,
+          encadrant: { id: userId, nom: '' },
         }, ...prev])
         toast.success('Deadline créée !')
       }
@@ -334,7 +339,6 @@ export default function SupervisorDeadlinesPage() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-4 flex-1 min-w-0">
-                      {/* Icône date */}
                       <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 ${
                         statut === 'ACTIVE'  ? 'bg-purple-100 dark:bg-purple-900/30' :
                         statut === 'BIENTOT' ? 'bg-amber-100 dark:bg-amber-900/30' :
@@ -373,14 +377,12 @@ export default function SupervisorDeadlinesPage() {
                       </div>
                     </div>
 
-                    {/* Actions + badge */}
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 ${cfg.badge}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                         {cfg.label}
                       </span>
 
-                      {/* Edit */}
                       <button onClick={() => openEdit(dl)}
                         className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
                           isDark ? 'bg-gray-800 hover:bg-purple-900/40 text-gray-400 hover:text-purple-400'
@@ -389,7 +391,6 @@ export default function SupervisorDeadlinesPage() {
                         <Edit3 size={13} />
                       </button>
 
-                      {/* Delete */}
                       <button onClick={() => setDeleteId(dl.id)}
                         className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
                           isDark ? 'bg-gray-800 hover:bg-red-900/30 text-gray-400 hover:text-red-400'
@@ -421,7 +422,6 @@ export default function SupervisorDeadlinesPage() {
               className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-white'}`}
               onClick={e => e.stopPropagation()}
             >
-              {/* Header */}
               <div className="px-6 pt-6 pb-4" style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(66,19,132,0.08)'}` }}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -441,9 +441,7 @@ export default function SupervisorDeadlinesPage() {
                 </div>
               </div>
 
-              {/* Body */}
               <div className="p-6 space-y-4">
-                {/* Titre */}
                 <div>
                   <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>Titre *</label>
                   <input type="text" value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))}
@@ -452,7 +450,6 @@ export default function SupervisorDeadlinesPage() {
                   />
                 </div>
 
-                {/* Date */}
                 <div>
                   <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>Date limite *</label>
                   <input type="date" value={form.dateLimite} onChange={e => setForm(p => ({ ...p, dateLimite: e.target.value }))}
@@ -460,7 +457,6 @@ export default function SupervisorDeadlinesPage() {
                   />
                 </div>
 
-                {/* Description */}
                 <div>
                   <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>Description (optionnel)</label>
                   <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
@@ -470,7 +466,6 @@ export default function SupervisorDeadlinesPage() {
                   />
                 </div>
 
-                {/* Boutons */}
                 <div className="flex gap-2 pt-1">
                   <button onClick={() => setShowModal(false)}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
@@ -511,7 +506,7 @@ export default function SupervisorDeadlinesPage() {
                   <Trash2 size={24} className="text-red-500" />
                 </div>
                 <h3 className="font-bold text-lg mb-1">Supprimer la deadline ?</h3>
-                <p className={`text-sm ${muted}`}>Cette action est irréversible. La deadline sera définitivement supprimée.</p>
+                <p className={`text-sm ${muted}`}>Cette action est irréversible.</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setDeleteId(null)} disabled={deleting}
