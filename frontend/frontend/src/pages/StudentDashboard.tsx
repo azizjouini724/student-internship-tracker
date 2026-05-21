@@ -5,7 +5,7 @@ import {
   Settings, HelpCircle, Moon, Sun, LogOut,
   Plus, TrendingUp, Target, Clock, Award, Search
 } from 'lucide-react'
-import { X, Send, UserCheck, AlertCircle } from 'lucide-react'
+import { X, Send, UserCheck, AlertCircle,MessageCircle } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -194,6 +194,7 @@ export default function StudentDashboard() {
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard',     path: null           },
     { icon: FileText,        label: 'Reports',       path: '/reports'     },
+    { icon: MessageCircle,   label: 'Messages',      path: '/messages' },
     { icon: Bell,            label: 'Notifications', path: '/notifications'},
     { icon: User,            label: 'Profile',       path: '/profile'     },
   ]

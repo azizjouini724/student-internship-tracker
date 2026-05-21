@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FileText, Bell, User,
   Settings, HelpCircle, Moon, Sun, LogOut,
   Users, CheckCircle, Clock, TrendingUp,
-  ChevronRight, X, Check, XCircle, Calendar, Plus, Search, Briefcase
+  ChevronRight, X, Check, XCircle, Calendar, Plus, Search, Briefcase,MessageCircle
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -152,6 +152,7 @@ export default function SupervisorDashboard() {
     { icon: FileText,        label: 'Reports',       path: '/supervisor/reports' },
     { icon: Users,           label: 'Students',      path: '/supervisor/students' },
     { icon: Calendar,        label: 'Deadlines',     path: '/supervisor/deadlines' },
+    { icon: MessageCircle,   label: 'Messages',      path: '/messages' },
     { icon: Bell,            label: 'Notifications', path: '/notifications' },
     { icon: User,            label: 'Profile',       path: '/profile' },
   ]

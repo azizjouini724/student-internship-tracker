@@ -15,6 +15,7 @@ import ReportsPage from './pages/Reportspage'
 import SettingsPage from './pages/SettingsPage'
 import SupportPage from './pages/Supportpage'
 import NotificationsPage from './pages/NotificationsPage'
+import MessagesPage from './pages/MessagesPage'
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   const { token } = useAuthStore()
@@ -71,6 +72,7 @@ function App() {
         <Route path="/settings"      element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
         <Route path="/support"       element={<PrivateRoute><SupportPage /></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute><NotificationsPage /></PrivateRoute>} />
+        <Route path="/messages" element={<PrivateRoute><MessagesPage /></PrivateRoute>} />
 
       </Routes>
     </BrowserRouter>
