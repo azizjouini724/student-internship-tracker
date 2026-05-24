@@ -53,14 +53,19 @@ public class UserController {
         }
     }
 
-    @PutMapping("/{id}/photo")
-    public ResponseEntity<?> updatePhoto(@PathVariable Long id, @RequestBody Map<String, String> body) {
-        try {
-            return ResponseEntity.ok(userService.updatePhoto(id, body.get("photoUrl")));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+   @PutMapping("/{id}/photo")
+public ResponseEntity<?> updatePhoto(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    try {
+        String photoUrl = body.get("photoUrl");
+        if (photoUrl == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "photoUrl est requis"));
         }
+        userService.updatePhoto(id, photoUrl);
+        return ResponseEntity.ok(Map.of("message", "Photo mise à jour avec succès"));
+    } catch (RuntimeException e) {
+        return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
     }
+}
 
     @PutMapping("/{id}/password")
     public ResponseEntity<?> changePassword(@PathVariable Long id, @RequestBody Map<String, String> body) {

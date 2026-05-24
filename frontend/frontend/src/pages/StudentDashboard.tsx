@@ -17,11 +17,12 @@ import { useTheme } from '../hooks/useTheme'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
 import api from '../services/api'
+import NotificationBell from '../components/NotificationBell'
 
 const COLORS = ['#142588', '#006c48', '#ef4444', '#f59e0b']
 
 export default function StudentDashboard() {
-  const { nom, logout } = useAuthStore()
+  const { nom, logout, photoUrl } = useAuthStore()
   const { isDark, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const [rapports, setRapports] = useState<any[]>([])
@@ -316,14 +317,23 @@ export default function StudentDashboard() {
               className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </motion.button>
-
+            <NotificationBell isDark={isDark} />
             <motion.button
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/profile')}
-              className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white text-sm font-bold"
+              className="w-9 h-9 rounded-xl overflow-hidden"
             >
-              {nom?.charAt(0).toUpperCase() || 'U'}
-            </motion.button>
+              {photoUrl ? (
+                <img src={photoUrl} alt="avatar"
+                  className="w-9 h-9 rounded-xl object-cover"
+                  onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white text-sm font-bold">
+                  {nom?.charAt(0).toUpperCase() || 'U'}
+                </div>
+              )}
+</motion.button>
           </div>
         </motion.header>
 

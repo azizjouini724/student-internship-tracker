@@ -43,7 +43,7 @@ public class User {
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "encadrant"})
     private User encadrant;
 
-    @Column(name = "photo_url", columnDefinition = "TEXT")
+    @Column(name = "photo_url", columnDefinition = "LONGTEXT")
     private String photoUrl;
 
     // ❌ SUPPRIMÉ — Plus d'enum interne Role

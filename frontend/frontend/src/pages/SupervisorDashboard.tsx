@@ -16,9 +16,10 @@ import { useTheme } from '../hooks/useTheme'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
 import api from '../services/api'
+import NotificationBell from '../components/NotificationBell'
 
 export default function SupervisorDashboard() {
-  const { nom, logout } = useAuthStore()
+  const { nom, logout, photoUrl } = useAuthStore()
   const { isDark, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const [rapports, setRapports] = useState<any[]>([])
@@ -278,8 +279,9 @@ export default function SupervisorDashboard() {
               className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </motion.button>
-
+            <NotificationBell isDark={isDark} />
             {(() => {
+             
               const photoUrl = localStorage.getItem('photoUrl')
               return photoUrl ? (
                 <motion.button whileHover={{ scale: 1.05 }} onClick={() => navigate('/profile')}
@@ -537,10 +539,16 @@ export default function SupervisorDashboard() {
                       style={{ borderLeft: `3px solid ${demande.statut === 'ACCEPTE' ? '#006c48' : demande.statut === 'REFUSE' ? '#ef4444' : '#421384'}` }}>
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold"
-                            style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}>
-                            {demande.etudiant?.nom?.charAt(0) || 'E'}
+                          {photoUrl ? (
+                          <img src={photoUrl} alt="avatar"
+                            className="w-9 h-9 rounded-xl object-cover"
+                            onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-xl bg-gray-900 flex items-center justify-center text-white text-sm font-bold">
+                            {nom?.charAt(0).toUpperCase() || 'A'}
                           </div>
+                        )}
                           <div>
                             <p className="text-sm font-semibold text-gray-800 dark:text-white">{demande.etudiant?.nom}</p>
                             <p className="text-xs text-gray-400 dark:text-gray-300">{demande.etudiant?.email}</p>

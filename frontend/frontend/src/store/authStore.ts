@@ -4,7 +4,9 @@ interface AuthState {
   token: string | null
   role: string | null
   nom: string | null
+  photoUrl: string | null
   setAuth: (token: string, role: string, nom: string) => void
+  setPhotoUrl: (url: string | null) => void
   logout: () => void
 }
 
@@ -12,6 +14,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   token: localStorage.getItem('token'),
   role: localStorage.getItem('role'),
   nom: localStorage.getItem('nom'),
+  photoUrl: localStorage.getItem('photoUrl'),
 
   setAuth: (token, role, nom) => {
     localStorage.setItem('token', token)
@@ -20,12 +23,19 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ token, role, nom })
   },
 
-  // ✅ FIX : Force le redirect + vide TOUT le localStorage
+  // ✅ NOUVEAU — Mettre à jour la photo partout
+  setPhotoUrl: (url) => {
+    if (url) {
+      localStorage.setItem('photoUrl', url)
+    } else {
+      localStorage.removeItem('photoUrl')
+    }
+    set({ photoUrl: url })
+  },
+
   logout: () => {
-    localStorage.clear() // Vide TOUT au lieu de removeItem un par un
-    set({ token: null, role: null, nom: null })
-    
-    // Force le reload pour vider le cache du router
+    localStorage.clear()
+    set({ token: null, role: null, nom: null, photoUrl: null })
     window.location.href = '/login'
   }
 }))

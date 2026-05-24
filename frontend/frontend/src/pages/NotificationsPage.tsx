@@ -43,7 +43,7 @@ const timeAgo = (dateStr: string) => {
   if (mins < 1)   return "À l'instant"
   if (mins < 60)  return `${mins} min ago`
   if (hours < 24) return `${hours} h ago`
-  if (days < 7)   return `${days} June`
+  if (days < 7)   return `${days} days ago`
   return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
@@ -120,182 +120,193 @@ export default function NotificationsPage() {
   const displayed    = filter === 'UNREAD' ? notifs.filter(n => !n.estLue) : notifs
   const grouped      = groupNotifs(displayed)
 
-  const bg     = isDark ? '#0f1117' : '#f5f6fa'
-  const cardBg = isDark ? '#1a1d27' : '#ffffff'
-  const muted  = isDark ? '#6b7280' : '#9ca3af'
-
   return (
-    <div style={{ minHeight: '100vh', background: bg, fontFamily: 'system-ui, sans-serif' }}
-      className={isDark ? 'text-gray-100' : 'text-gray-900'}>
+    <div className={`min-h-screen ${isDark ? 'bg-[#0f1117] text-gray-100' : 'bg-[#f5f6fa] text-gray-900'}`}>
       <Toaster position="top-right" richColors />
 
-      {/* ── Page container ────────────────────────────────────────────────── */}
-      <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 0 80px' }}>
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
 
-        {/* ── Header ────────────────────────────────────────────────────────── */}
+        {/* ── Header ────────────────────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          style={{
-            background: cardBg,
-            borderRadius: '0 0 28px 28px',
-            padding: '56px 24px 28px',
-            boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.06)',
-            marginBottom: 24,
-          }}
+          className={`rounded-2xl p-6 ${isDark ? 'bg-[#1a1d27]' : 'bg-white'}`}
+          style={{ boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.06)' }}
         >
-          {/* Back + filter */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          {/* Top row */}
+          <div className="flex items-center justify-between mb-5">
             <button onClick={() => {
-  const role = localStorage.getItem('role')
-  if (role === 'ENCADRANT') navigate('/supervisor')
-  else if (role === 'ADMIN') navigate('/admin')
-  else navigate('/student')
-}}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: muted }}>
-              <ArrowLeft size={20} />
+              const role = localStorage.getItem('role')
+              if (role === 'ENCADRANT') navigate('/supervisor')
+              else if (role === 'ADMIN') navigate('/admin')
+              else navigate('/student')
+            }}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                isDark ? 'bg-[#252836] hover:bg-[#2d3142] text-gray-400' : 'bg-[#f0f2ff] hover:bg-[#e0e3ff] text-blue-600'
+              }`}>
+              <ArrowLeft size={18} />
             </button>
-            <div style={{ display: 'flex', gap: 8 }}>
+
+            <div className="flex items-center gap-3">
+              {/* Refresh */}
+              <button onClick={fetchNotifs}
+                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  isDark ? 'bg-[#252836] hover:bg-[#2d3142] text-gray-400' : 'bg-[#f0f2ff] hover:bg-[#e0e3ff] text-blue-600'
+                }`}>
+                <RefreshCw size={18} />
+              </button>
+
+              {/* Filter toggle */}
               <button onClick={() => setShowFilter(!showFilter)}
-                style={{
-                  width: 40, height: 40, borderRadius: 12,
-                  background: isDark ? '#252836' : '#f0f2ff',
-                  border: 'none', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#3b82f6',
-                }}>
+                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  isDark ? 'bg-[#252836] hover:bg-[#2d3142] text-blue-400' : 'bg-[#f0f2ff] hover:bg-[#e0e3ff] text-blue-600'
+                }`}>
                 <SlidersHorizontal size={18} />
               </button>
+
+              {/* Mark all read */}
+              {nonLuesCount > 0 && (
+                <motion.button
+                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  onClick={marquerToutesLues}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+                  style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}
+                >
+                  <CheckCheck size={16} /> Tout marquer lu
+                </motion.button>
+              )}
             </div>
           </div>
 
           {/* Title */}
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>
-            Notifications
-          </h1>
-          <p style={{ fontSize: 14, color: muted, margin: 0 }}>
+          <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
+          <p className={`text-sm mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
             You have{' '}
-            <span style={{ color: '#3b82f6', fontWeight: 600 }}>
-              {nonLuesCount} Notification{nonLuesCount !== 1 ? 's' : ''}
+            <span className="text-blue-500 font-semibold">
+              {nonLuesCount} notification{nonLuesCount !== 1 ? 's' : ''}
             </span>{' '}
             today.
           </p>
 
-          {/* Filter dropdown */}
+          {/* Filter bar */}
           <AnimatePresence>
             {showFilter && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                style={{ overflow: 'hidden', marginTop: 16 }}
+                exit={{ opacity: 0, height: 0 }} className="overflow-hidden mt-4"
               >
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div className="flex gap-2">
                   {(['ALL', 'UNREAD'] as const).map(f => (
                     <button key={f} onClick={() => { setFilter(f); setShowFilter(false) }}
-                      style={{
-                        flex: 1, padding: '8px 12px', borderRadius: 10, border: 'none',
-                        cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                        background: filter === f ? '#3b82f6' : isDark ? '#252836' : '#f0f2ff',
-                        color: filter === f ? 'white' : muted,
-                        transition: 'all 0.2s',
-                      }}>
-                      {f === 'ALL' ? 'Toutes' : '🔴 Non lues'}
+                      className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all ${
+                        filter === f
+                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                          : isDark ? 'bg-[#252836] text-gray-400 hover:bg-[#2d3142]' : 'bg-[#f0f2ff] text-gray-500 hover:bg-[#e0e3ff]'
+                      }`}>
+                      {f === 'ALL' ? '📋 Toutes' : '🔴 Non lues'}
                     </button>
                   ))}
-                  {nonLuesCount > 0 && (
-                    <button onClick={() => { marquerToutesLues(); setShowFilter(false) }}
-                      style={{
-                        flex: 1, padding: '8px 12px', borderRadius: 10, border: 'none',
-                        cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                        background: isDark ? '#252836' : '#f0f2ff', color: '#10b981',
-                      }}>
-                      <CheckCheck size={13} style={{ display: 'inline', marginRight: 4 }} />
-                      Tout lu
-                    </button>
-                  )}
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </motion.div>
 
-        {/* ── Content ───────────────────────────────────────────────────────── */}
-        <div style={{ padding: '0 16px' }}>
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
-              <Loader2 size={28} className="animate-spin" style={{ color: '#3b82f6' }} />
+        {/* ── Filter Tabs (always visible) ──────────────────────────────── */}
+        <div className={`flex gap-2 p-1.5 rounded-xl ${isDark ? 'bg-[#1a1d27]' : 'bg-white'}`}
+          style={{ boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.2)' : '0 2px 12px rgba(0,0,0,0.04)' }}>
+          {(['ALL', 'UNREAD'] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                filter === f
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                  : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-[#252836]' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}>
+              {f === 'ALL' ? 'Toutes' : 'Non lues'}
+              {f === 'UNREAD' && nonLuesCount > 0 && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-md ${
+                  filter === f ? 'bg-white/20' : isDark ? 'bg-[#252836] text-blue-400' : 'bg-blue-100 text-blue-600'
+                }`}>
+                  {nonLuesCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Content ───────────────────────────────────────────────────── */}
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 size={32} className="animate-spin text-blue-500" />
+          </div>
+        ) : grouped.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className={`rounded-2xl p-16 text-center ${isDark ? 'bg-[#1a1d27]' : 'bg-white'}`}
+            style={{ boxShadow: isDark ? '0 2px 16px rgba(0,0,0,0.2)' : '0 2px 16px rgba(0,0,0,0.06)' }}
+          >
+            <div className={`w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center ${
+              isDark ? 'bg-[#252836]' : 'bg-[#f0f2ff]'
+            }`}>
+              <BellOff size={28} className={isDark ? 'text-gray-600' : 'text-gray-400'} />
             </div>
-          ) : grouped.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-              style={{
-                textAlign: 'center', padding: '60px 24px',
-                background: cardBg, borderRadius: 24,
-                boxShadow: isDark ? '0 2px 16px rgba(0,0,0,0.2)' : '0 2px 16px rgba(0,0,0,0.06)',
-              }}
-            >
-              <div style={{
-                width: 64, height: 64, borderRadius: 20, margin: '0 auto 16px',
-                background: isDark ? '#252836' : '#f0f2ff',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <BellOff size={28} style={{ color: muted }} />
-              </div>
-              <p style={{ fontSize: 16, fontWeight: 600, margin: '0 0 6px' }}>
-                {filter === 'UNREAD' ? 'Aucune notification non lue' : 'Aucune notification'}
-              </p>
-              <p style={{ fontSize: 13, color: muted, margin: 0 }}>
-                Vous serez notifié des activités importantes ici.
-              </p>
-            </motion.div>
-          ) : (
-            grouped.map((group, gi) => (
-              <div key={group.label} style={{ marginBottom: 24 }}>
+            <p className="text-base font-semibold mb-1">
+              {filter === 'UNREAD' ? 'Aucune notification non lue' : 'Aucune notification'}
+            </p>
+            <p className={`text-sm ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+              Vous serez notifié des activités importantes ici.
+            </p>
+          </motion.div>
+        ) : (
+          <div className="space-y-8">
+            {grouped.map((group, gi) => (
+              <div key={group.label}>
                 {/* Group label */}
-                <motion.p
+                <motion.div
                   initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: gi * 0.1 }}
-                  style={{
-                    fontSize: 16, fontWeight: 700,
-                    margin: '0 0 12px 4px',
-                    color: isDark ? '#e5e7eb' : '#111827',
-                  }}
+                  className="flex items-center gap-3 mb-4"
                 >
-                  {group.label}
-                </motion.p>
+                  <h2 className="text-sm font-bold tracking-wide uppercase">
+                    {group.label}
+                  </h2>
+                  <div className={`flex-1 h-px ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`} />
+                  <span className={`text-xs font-medium ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+                    {group.items.length}
+                  </span>
+                </motion.div>
 
-                {/* Notif cards */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Notif cards — Desktop grid */}
+                <div className="flex flex-col gap-3">
                   {group.items.map((notif, i) => {
                     const { icon: Icon, gradient, accent } = getNotifStyle(notif.titre)
                     return (
                       <motion.div
                         key={notif.id}
                         initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: gi * 0.1 + i * 0.06 }}
+                        transition={{ delay: gi * 0.1 + i * 0.05 }}
+                        className={`flex items-center gap-4 p-4 rounded-2xl transition-all cursor-pointer ${
+                          notif.estLue
+                            ? isDark ? 'bg-[#1a1d27] hover:bg-[#1e2130]' : 'bg-white hover:bg-gray-50'
+                            : isDark ? 'bg-[#1a1d27] hover:bg-[#1e2130]' : 'bg-white hover:bg-gray-50'
+                        }`}
                         style={{
-                          background: cardBg,
-                          borderRadius: 20,
-                          padding: '16px',
                           boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.2)' : '0 2px 12px rgba(0,0,0,0.06)',
-                          display: 'flex', alignItems: 'center', gap: 14,
-                          position: 'relative',
                           borderLeft: !notif.estLue ? `3px solid ${accent}` : '3px solid transparent',
-                          transition: 'all 0.2s',
                         }}
+                        onClick={() => { if (!notif.estLue) marquerLue(notif.id) }}
                       >
-                        {/* Point non lu */}
+                        {/* Unread dot */}
                         {!notif.estLue && (
                           <span style={{
-                            position: 'absolute', top: 16, left: -8,
                             width: 10, height: 10, borderRadius: '50%',
-                            background: accent,
-                            boxShadow: `0 0 0 3px ${cardBg}`,
+                            background: accent, flexShrink: 0,
+                            boxShadow: `0 0 8px ${accent}60`,
                           }} />
                         )}
 
-                        {/* Avatar / Icône */}
+                        {/* Icon */}
                         <div style={{
-                          width: 48, height: 48, borderRadius: 16, 
+                          width: 48, height: 48, borderRadius: 16,
                           background: `linear-gradient(135deg, ${gradient.split(' ')[1]}, ${gradient.split(' ')[3]})`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           flexShrink: 0,
@@ -303,43 +314,31 @@ export default function NotificationsPage() {
                           <Icon size={22} style={{ color: 'white' }} />
                         </div>
 
-                        {/* Texte */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{
-                            fontSize: 13, fontWeight: !notif.estLue ? 700 : 500,
-                            margin: '0 0 3px',
-                            color: isDark ? '#f3f4f6' : '#111827',
-                            opacity: notif.estLue ? 0.7 : 1,
-                          }}>
-                            <span style={{ fontWeight: 700, color: accent }}>
-                              {notif.titre}
-                            </span>
+                        {/* Text */}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-bold ${notif.estLue ? (isDark ? 'text-gray-500' : 'text-gray-400') : ''}`}
+                            style={{ color: !notif.estLue ? accent : undefined }}>
+                            {notif.titre}
                           </p>
-                          <p style={{
-                            fontSize: 12, color: muted, margin: '0 0 4px',
-                            lineHeight: 1.4,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                          }}>
+                          <p className={`text-sm mt-0.5 line-clamp-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                             {notif.message}
                           </p>
-                          <p style={{ fontSize: 11, color: muted, margin: 0 }}>
+                          <p className={`text-xs mt-1 ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+                            <Clock size={10} className="inline mr-1" />
                             {timeAgo(notif.dateEnvoi)}
                           </p>
                         </div>
 
-                        {/* Thumbnail / Action */}
-                        <div style={{ flexShrink: 0 }}>
+                        {/* Action */}
+                        <div className="shrink-0">
                           {!notif.estLue ? (
                             <button
-                              onClick={() => marquerLue(notif.id)}
+                              onClick={(e) => { e.stopPropagation(); marquerLue(notif.id) }}
                               disabled={marking === notif.id}
                               style={{
-                                width: 36, height: 36, borderRadius: 12,
-                                background: `${accent}20`,
-                                border: `1.5px solid ${accent}40`,
+                                width: 40, height: 40, borderRadius: 14,
+                                background: `${accent}15`,
+                                border: `1.5px solid ${accent}30`,
                                 cursor: 'pointer',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 color: accent,
@@ -353,7 +352,7 @@ export default function NotificationsPage() {
                             </button>
                           ) : (
                             <div style={{
-                              width: 36, height: 36, borderRadius: 12,
+                              width: 40, height: 40, borderRadius: 14,
                               background: isDark ? '#252836' : '#f0f2ff',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>
@@ -366,9 +365,9 @@ export default function NotificationsPage() {
                   })}
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

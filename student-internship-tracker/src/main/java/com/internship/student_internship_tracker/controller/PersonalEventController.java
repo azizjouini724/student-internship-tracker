@@ -16,23 +16,28 @@ public class PersonalEventController {
 
     private final PersonalEventService eventService;
 
-    // ── GET /api/events/user/{userId} ──────────────────────────────────────
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<PersonalEvent>> getEvents(@PathVariable Long userId) {
         return ResponseEntity.ok(eventService.getEventsByUser(userId));
     }
 
-    // ── POST /api/events ───────────────────────────────────────────────────
+    // ✅ FIX : accepte "date" OU "dateEcheance"
     @PostMapping
     public ResponseEntity<?> createEvent(@RequestBody Map<String, Object> body) {
         try {
             Long    userId      = Long.valueOf(body.get("userId").toString());
             String  titre       = (String)  body.get("titre");
-            String  date        = (String)  body.get("date");
+            // ✅ Accepte les deux noms
+            String  date        = (String)  body.getOrDefault("dateEcheance", body.get("date"));
             String  description = (String)  body.getOrDefault("description", "");
             boolean important   = Boolean.parseBoolean(
                 body.getOrDefault("important", false).toString()
             );
+
+            if (titre == null || titre.isBlank())
+                return ResponseEntity.badRequest().body(Map.of("error", "Le titre est requis"));
+            if (date == null || date.isBlank())
+                return ResponseEntity.badRequest().body(Map.of("error", "La date est requise"));
 
             PersonalEvent event = eventService.createEvent(userId, titre, date, description, important);
             return ResponseEntity.ok(event);
@@ -41,7 +46,6 @@ public class PersonalEventController {
         }
     }
 
-    // ── PUT /api/events/{id} ───────────────────────────────────────────────
     @PutMapping("/{id}")
     public ResponseEntity<?> updateEvent(
             @PathVariable Long id,
@@ -50,7 +54,7 @@ public class PersonalEventController {
         try {
             Long    userId      = Long.valueOf(body.get("userId").toString());
             String  titre       = (String)  body.get("titre");
-            String  date        = (String)  body.get("date");
+            String  date        = (String)  body.getOrDefault("dateEcheance", body.get("date"));
             String  description = (String)  body.getOrDefault("description", "");
             boolean important   = Boolean.parseBoolean(
                 body.getOrDefault("important", false).toString()
@@ -63,21 +67,23 @@ public class PersonalEventController {
         }
     }
 
-    // ── PUT /api/events/{id}/important ─────────────────────────────────────
+    // ✅ FIX : userId optionnel dans le body
     @PutMapping("/{id}/important")
     public ResponseEntity<?> toggleImportant(
             @PathVariable Long id,
-            @RequestBody Map<String, Object> body
+            @RequestBody(required = false) Map<String, Object> body
     ) {
         try {
-            Long userId = Long.valueOf(body.get("userId").toString());
+            Long userId = null;
+            if (body != null && body.containsKey("userId")) {
+                userId = Long.valueOf(body.get("userId").toString());
+            }
             return ResponseEntity.ok(eventService.toggleImportant(id, userId));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    // ── DELETE /api/events/{id} ────────────────────────────────────────────
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteEvent(
             @PathVariable Long id,
