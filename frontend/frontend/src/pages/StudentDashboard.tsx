@@ -5,7 +5,7 @@ import {
   Settings, HelpCircle, Moon, Sun, LogOut,
   Plus, TrendingUp, Target, Clock, Award, Search
 } from 'lucide-react'
-import { X, Send, UserCheck, AlertCircle,MessageCircle } from 'lucide-react'
+import { X, Send, UserCheck, AlertCircle, MessageCircle } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -35,6 +35,11 @@ export default function StudentDashboard() {
   const [loadingDemande, setLoadingDemande] = useState(false)
   const [deadlines, setDeadlines] = useState<any[]>([])
 
+  // ⭐ Timer deadline 24h
+  const [urgentDeadline, setUrgentDeadline] = useState<any | null>(null)
+  const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 })
+  const [isUrgent, setIsUrgent] = useState(false)
+
   useEffect(() => {
     fetchRapports()
     fetchEncadrants()
@@ -42,7 +47,49 @@ export default function StudentDashboard() {
     fetchDeadlines()
   }, [])
 
-  // ✅ FIX A — Récupère uniquement les rapports de CET étudiant
+  // ⭐ Countdown deadline 24h
+  useEffect(() => {
+    const calculateCountdown = () => {
+      if (!deadlines || deadlines.length === 0) {
+        setUrgentDeadline(null)
+        setIsUrgent(false)
+        return
+      }
+
+      const now = new Date().getTime()
+      let nearestDiff = Infinity
+      let nearestDL = null
+
+      for (const dl of deadlines) {
+        const dateStr = dl.dateLimite || dl.dateEcheance
+        if (!dateStr) continue
+        const dlDate = new Date(dateStr).getTime()
+        const diff = dlDate - now
+        if (diff > 0 && diff < nearestDiff) {
+          nearestDiff = diff
+          nearestDL = dl
+        }
+      }
+
+      // 24h = 86400000 ms
+      if (nearestDL && nearestDiff <= 86400000) {
+        setUrgentDeadline(nearestDL)
+        const h = Math.floor(nearestDiff / (1000 * 60 * 60))
+        const m = Math.floor((nearestDiff % (1000 * 60 * 60)) / (1000 * 60))
+        const s = Math.floor((nearestDiff % (1000 * 60)) / 1000)
+        setCountdown({ h, m, s })
+        setIsUrgent(nearestDiff <= 3600000) // 1h = clignote
+      } else {
+        setUrgentDeadline(null)
+        setIsUrgent(false)
+      }
+    }
+
+    calculateCountdown()
+    const interval = setInterval(calculateCountdown, 1000)
+    return () => clearInterval(interval)
+  }, [deadlines])
+
   const fetchRapports = async () => {
     try {
       const userId = localStorage.getItem('userId')
@@ -74,21 +121,19 @@ export default function StudentDashboard() {
     }
   }
 
-  // ✅ FIX C — Récupère les deadlines de SON encadrant uniquement
   const fetchDeadlines = async () => {
     try {
       const userId = localStorage.getItem('userId')
       if (!userId) return
-      
-      // D'abord récupérer l'étudiant pour connaître son encadrant
+
       const userRes = await api.get(`/users/${userId}`)
       const encadrantId = userRes.data.encadrant?.id
-      
+
       if (encadrantId) {
         const res = await api.get(`/deadlines/encadrant/${encadrantId}`)
         setDeadlines(res.data)
       } else {
-        setDeadlines([]) // Pas d'encadrant = pas de deadlines
+        setDeadlines([])
       }
     } catch {
       console.error('Erreur chargement deadlines')
@@ -125,11 +170,9 @@ export default function StudentDashboard() {
     }
   }
 
-  // ✅ FIX B — Vérifie si l'étudiant a un encadrant accepté
   const encadrantAccepte = demandes.find(d => d.statut === 'ACCEPTE')
   const demandeEnAttente = demandes.find(d => d.statut === 'EN_ATTENTE')
 
-  // ✅ FIX B — Clic sur NEW SUBMISSION : bloqué sans encadrant accepté
   const handleNewSubmission = () => {
     if (!encadrantAccepte) {
       toast.error(
@@ -193,11 +236,11 @@ export default function StudentDashboard() {
   ]
 
   const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard',     path: null           },
-    { icon: FileText,        label: 'Reports',       path: '/reports'     },
-    { icon: MessageCircle,   label: 'Messages',      path: '/messages' },
-    { icon: Bell,            label: 'Notifications', path: '/notifications'},
-    { icon: User,            label: 'Profile',       path: '/profile'     },
+    { icon: LayoutDashboard, label: 'Dashboard', path: null },
+    { icon: FileText, label: 'Reports', path: '/reports' },
+    { icon: MessageCircle, label: 'Messages', path: '/messages' },
+    { icon: Bell, label: 'Notifications', path: '/notifications' },
+    { icon: User, label: 'Profile', path: '/profile' },
   ]
 
   const handleNavClick = (label: string, path: string | null) => {
@@ -277,7 +320,6 @@ export default function StudentDashboard() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
 
-              {/* ✅ FIX B — Cacher le bouton demande si encadrant déjà accepté */}
               {!encadrantAccepte && (
                 <motion.button
                   whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
@@ -289,7 +331,6 @@ export default function StudentDashboard() {
                 </motion.button>
               )}
 
-              {/* ✅ FIX B — Afficher l'encadrant accepté si disponible */}
               {encadrantAccepte && (
                 <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                   <UserCheck className="w-4 h-4 text-green-600 dark:text-green-400" />
@@ -299,7 +340,6 @@ export default function StudentDashboard() {
                 </div>
               )}
 
-              {/* ✅ FIX B — NEW SUBMISSION bloqué si pas d'encadrant accepté */}
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                 onClick={handleNewSubmission}
@@ -313,27 +353,43 @@ export default function StudentDashboard() {
               </motion.button>
             </div>
 
+            {/* ⭐ Timer Deadline 24h */}
+            {urgentDeadline && (
+              <motion.div
+                animate={isUrgent ? { scale: [1, 1.08, 1], opacity: [1, 0.7, 1] } : {}}
+                transition={{ repeat: Infinity, duration: 0.8, ease: 'easeInOut' }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-lg cursor-pointer"
+                style={{ background: isUrgent ? 'linear-gradient(135deg, #dc2626, #991b1b)' : 'linear-gradient(135deg, #ef4444, #dc2626)' }}
+                onClick={() => navigate('/profile')}
+                title={`Deadline : ${urgentDeadline.type || urgentDeadline.titre}`}
+              >
+                <Clock size={16} className="text-white" />
+                <span>
+                  {String(countdown.h).padStart(2, '0')}:{String(countdown.m).padStart(2, '0')}:{String(countdown.s).padStart(2, '0')}
+                </span>
+              </motion.div>
+            )}
+
             <motion.button whileTap={{ scale: 0.9 }} onClick={toggleTheme}
               className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </motion.button>
             <NotificationBell isDark={isDark} />
-            <motion.button
+            <motion.div
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/profile')}
-              className="w-9 h-9 rounded-xl overflow-hidden"
+              className="w-9 h-9 rounded-xl cursor-pointer"
             >
               {photoUrl ? (
                 <img src={photoUrl} alt="avatar"
                   className="w-9 h-9 rounded-xl object-cover"
-                  onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
                 <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white text-sm font-bold">
                   {nom?.charAt(0).toUpperCase() || 'U'}
                 </div>
               )}
-</motion.button>
+            </motion.div>
           </div>
         </motion.header>
 
@@ -350,7 +406,19 @@ export default function StudentDashboard() {
             </p>
           </motion.div>
 
-          {/* ✅ FIX B — Bannière avertissement si pas d'encadrant */}
+          {/* ⭐ Bannière deadline urgente */}
+          {urgentDeadline && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+              className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
+            >
+              <Clock className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <p className="text-sm text-red-700 dark:text-red-400">
+                <span className="font-bold">Deadline imminente :</span> {urgentDeadline.type || urgentDeadline.titre} — dans {String(countdown.h).padStart(2, '0')}h{String(countdown.m).padStart(2, '0')}m{String(countdown.s).padStart(2, '0')}s
+              </p>
+            </motion.div>
+          )}
+
           {!encadrantAccepte && (
             <motion.div
               initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
@@ -485,9 +553,9 @@ export default function StudentDashboard() {
                         ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                         : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                     }`}>
-                      {demande.statut === 'ACCEPTE' ? '✅ Acceptée'
-                        : demande.statut === 'REFUSE' ? '❌ Refusée'
-                        : '⏳ En attente'}
+                      {demande.statut === 'ACCEPTE' ? 'Acceptee'
+                        : demande.statut === 'REFUSE' ? 'Refusee'
+                        : 'En attente'}
                     </span>
                   </motion.div>
                 ))}
@@ -507,7 +575,7 @@ export default function StudentDashboard() {
                 <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Your latest internship reports</p>
               </div>
               <button onClick={() => navigate('/reports')} className="text-sm text-primary font-medium hover:opacity-70 transition-opacity">
-                View All →
+                View All
               </button>
             </div>
 
@@ -623,7 +691,7 @@ export default function StudentDashboard() {
                 <textarea
                   value={messageDemande}
                   onChange={e => setMessageDemande(e.target.value)}
-                  placeholder="Bonjour, je souhaite être encadré par vous..."
+                  placeholder="Bonjour, je souhaite etre encadre par vous..."
                   rows={3}
                   className="w-full bg-blue-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-primary outline-none text-sm transition-all resize-none"
                 />

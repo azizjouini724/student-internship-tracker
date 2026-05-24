@@ -3,7 +3,6 @@ package com.internship.student_internship_tracker.service;
 import com.internship.student_internship_tracker.entity.Rapport;
 import com.internship.student_internship_tracker.entity.Rapport.StatutRapport;
 import com.internship.student_internship_tracker.entity.User;
-import com.internship.student_internship_tracker.entity.Notification;
 import com.internship.student_internship_tracker.repository.RapportRepository;
 import com.internship.student_internship_tracker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
@@ -57,6 +57,19 @@ public class RapportService {
             throw new IllegalArgumentException("Le titre est obligatoire.");
         }
 
+        // ⭐ Limite : 1 soumission par semaine
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime debutSemaine = now.with(java.time.DayOfWeek.MONDAY)
+                .withHour(0).withMinute(0).withSecond(0).withNano(0);
+        List<Rapport> rapportsSemaine = rapportRepository.findByAuteurIdAndDateDepotAfter(auteurId, debutSemaine);
+        if (!rapportsSemaine.isEmpty()) {
+            LocalDateTime finSemaine = debutSemaine.plusWeeks(1);
+            throw new IllegalArgumentException(
+                "Vous avez déjà soumis un rapport cette semaine. Prochaine soumission possible le "
+                + finSemaine.format(DateTimeFormatter.ofPattern("dd/MM/yyyy à HH:mm"))
+            );
+        }
+
         // Récupérer l'auteur
         User auteur = userRepository.findById(auteurId)
             .orElseThrow(() -> new RuntimeException("Étudiant introuvable : " + auteurId));
@@ -89,10 +102,10 @@ public class RapportService {
         // Notification à l'encadrant
         if (encadrant != null) {
             notificationService.createNotification(
-            "Nouveau rapport soumis", 
-            "Nouveau rapport soumis par " + auteur.getNom() + " : \"" + titre + "\"",
-            encadrant.getId()
-);
+                "Nouveau rapport soumis",
+                "Nouveau rapport soumis par " + auteur.getNom() + " : \"" + titre + "\"",
+                encadrant.getId()
+            );
         }
 
         return saved;
@@ -135,13 +148,13 @@ public class RapportService {
         // Notification à l'étudiant
         if (rapport.getAuteur() != null) {
             String msg = nouveauStatut == StatutRapport.VALIDE
-                ? "✅ Votre rapport \"" + rapport.getTitre() + "\" a été validé !"
-                : "❌ Votre rapport \"" + rapport.getTitre() + "\" a été rejeté. Consultez les commentaires.";
-           notificationService.createNotification(
-    nouveauStatut == StatutRapport.VALIDE ? "Rapport validé" : "Rapport rejeté",
-    msg,
-    rapport.getAuteur().getId()
-);
+                ? "Votre rapport \"" + rapport.getTitre() + "\" a été validé !"
+                : "Votre rapport \"" + rapport.getTitre() + "\" a été rejeté. Consultez les commentaires.";
+            notificationService.createNotification(
+                nouveauStatut == StatutRapport.VALIDE ? "Rapport validé" : "Rapport rejeté",
+                msg,
+                rapport.getAuteur().getId()
+            );
         }
 
         return saved;
@@ -151,7 +164,6 @@ public class RapportService {
     public void deleteRapport(Long id) {
         Rapport rapport = getRapportById(id);
 
-        // Supprimer le fichier physique
         if (rapport.getFichierChemin() != null) {
             fileStorageService.deleteFile(rapport.getFichierChemin());
         }

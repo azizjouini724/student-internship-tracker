@@ -6,7 +6,7 @@ import {
   ChevronDown, Eye, Send, BookOpen, Calendar,
   ArrowLeft, Loader2, Upload,
   Trash2, Download, Archive, Image, Paperclip, MessageSquare,
-  UserCheck
+  UserCheck, Shield
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
@@ -104,7 +104,6 @@ export default function ReportsPage() {
   const [rapports,   setRapports]   = useState<Rapport[]>([])
   const [loading,    setLoading]    = useState(true)
 
-  // ⭐ Encadrant accepté automatiquement
   const [monEncadrant, setMonEncadrant] = useState<{ id: number; nom: string; email: string } | null>(null)
   const [demandeEnAttente, setDemandeEnAttente] = useState<Demande | null>(null)
   const [loadingEncadrant, setLoadingEncadrant] = useState(true)
@@ -129,7 +128,12 @@ export default function ReportsPage() {
   // ── Detail drawer ────────────────────────────────────────────────────────
   const [selected, setSelected] = useState<Rapport | null>(null)
 
-  // ⭐ Ouvrir un rapport et charger ses commentaires
+  // ⭐ Limite 1 soumission par semaine
+  const [canSubmit, setCanSubmit] = useState(true)
+  const [nextSubmitDate, setNextSubmitDate] = useState<Date | null>(null)
+  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+  const [showLockOverlay, setShowLockOverlay] = useState(false)
+
   const openRapport = async (rapport: Rapport) => {
     setSelected(rapport)
     try {
@@ -158,20 +162,14 @@ export default function ReportsPage() {
     }
   }
 
-  // ⭐ Fetch l'encadrant accepté automatiquement
   const fetchMonEncadrant = async () => {
     setLoadingEncadrant(true)
     try {
       const res = await api.get<Demande[]>(`/demandes/etudiant/${userId}`)
       const acceptee = res.data.find(d => d.statut === 'ACCEPTE')
       const enAttente = res.data.find(d => d.statut === 'EN_ATTENTE')
-
-      if (acceptee?.encadrant) {
-        setMonEncadrant(acceptee.encadrant)
-      }
-      if (enAttente) {
-        setDemandeEnAttente(enAttente)
-      }
+      if (acceptee?.encadrant) setMonEncadrant(acceptee.encadrant)
+      if (enAttente) setDemandeEnAttente(enAttente)
     } catch {
       console.error('Erreur chargement encadrant')
     } finally {
@@ -179,15 +177,75 @@ export default function ReportsPage() {
     }
   }
 
+  // ⭐ Vérifier la limite de soumission
+  const checkCanSubmit = async () => {
+    try {
+      const res = await api.get<Rapport[]>(`/rapports/etudiant/${userId}`)
+      const rapportsData = res.data
+
+      const now = new Date()
+      const debutSemaine = new Date(now)
+      const day = now.getDay()
+      const diffToMonday = day === 0 ? -6 : 1 - day
+      debutSemaine.setDate(now.getDate() + diffToMonday)
+      debutSemaine.setHours(0, 0, 0, 0)
+
+      const rapportsSemaine = rapportsData.filter((r: any) =>
+        new Date(r.dateDepot) >= debutSemaine
+      )
+
+      if (rapportsSemaine.length > 0) {
+        setCanSubmit(false)
+        const finSemaine = new Date(debutSemaine)
+        finSemaine.setDate(finSemaine.getDate() + 7)
+        setNextSubmitDate(finSemaine)
+      } else {
+        setCanSubmit(true)
+        setNextSubmitDate(null)
+      }
+    } catch {
+      setCanSubmit(true)
+    }
+  }
+
+  // ⭐ Countdown en temps réel
+  useEffect(() => {
+    if (!nextSubmitDate) return
+
+    const updateCountdown = () => {
+      const now = new Date()
+      const diff = nextSubmitDate.getTime() - now.getTime()
+
+      if (diff <= 0) {
+        setCanSubmit(true)
+        setNextSubmitDate(null)
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+        return
+      }
+
+      setTimeLeft({
+        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+        minutes: Math.floor((diff / (1000 * 60)) % 60),
+        seconds: Math.floor((diff / 1000) % 60),
+      })
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+    return () => clearInterval(interval)
+  }, [nextSubmitDate])
+
   useEffect(() => {
     fetchRapports()
     fetchMonEncadrant()
+    checkCanSubmit()
   }, [])
 
   // ── File selection ───────────────────────────────────────────────────────
   const handleFile = (file: File) => {
     if (!ACCEPTED_TYPES.includes(file.type) && file.type !== '') {
-      toast.error('Format non supporté. Utilisez PDF, Word, PPT, ZIP ou image.')
+      toast.error('Format non supporté.')
       return
     }
     if (file.size > MAX_SIZE_MB * 1024 * 1024) {
@@ -235,11 +293,18 @@ export default function ReportsPage() {
         },
       })
       setRapports(prev => [res.data, ...prev])
-      toast.success('Rapport soumis avec succès à ' + monEncadrant.nom + ' !')
+      toast.success('Rapport soumis avec succès !')
       closeModal()
+      // ⭐ Re-vérifier la limite après soumission
+      checkCanSubmit()
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Erreur lors de la soumission'
       toast.error(errorMsg)
+      // ⭐ Si erreur de limite, mettre à jour le state
+      if (errorMsg.includes('semaine') || errorMsg.includes('week')) {
+        setCanSubmit(false)
+        checkCanSubmit()
+      }
     } finally {
       setSubmitting(false)
       setUploadPct(0)
@@ -247,9 +312,14 @@ export default function ReportsPage() {
   }
 
   const openModal = () => {
+    // ⭐ Vérifier la limite avant d'ouvrir
+    if (!canSubmit) {
+      setShowLockOverlay(true)
+      return
+    }
     if (!monEncadrant) {
       if (demandeEnAttente) {
-        toast.error('Votre demande d\'encadrement est en attente. Attendez la réponse avant de soumettre.')
+        toast.error('Votre demande d\'encadrement est en attente.')
       } else {
         toast.error('Vous devez avoir un encadrant accepté pour soumettre un rapport.')
       }
@@ -264,7 +334,6 @@ export default function ReportsPage() {
     setTitre(''); setFichier(null)
   }
 
-  // ── Download fichier ──────────────────────────────────────────────────────
   const handleDownload = async (rapportId: number, fileName: string) => {
     try {
       const response = await api.get(`/rapports/${rapportId}/fichier`, {
@@ -324,23 +393,61 @@ export default function ReportsPage() {
           whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
           onClick={openModal}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-lg ${
-            !monEncadrant ? 'opacity-50 cursor-not-allowed' : ''
+            !canSubmit || !monEncadrant ? 'opacity-50 cursor-not-allowed' : ''
           }`}
-          style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
-          title={!monEncadrant ? 'Vous devez avoir un encadrant accepté' : ''}
+          style={{ background: !canSubmit ? 'linear-gradient(135deg, #9ca3af, #6b7280)' : 'linear-gradient(135deg, #142588, #303f9f)' }}
+          title={!canSubmit ? 'Limite hebdomadaire atteinte' : !monEncadrant ? 'Vous devez avoir un encadrant accepté' : ''}
         >
-          <Plus size={16} /> Nouvelle soumission
+          {!canSubmit ? <Shield size={16} /> : <Plus size={16} />}
+          {!canSubmit ? 'Limite atteinte' : 'Nouvelle soumission'}
         </motion.button>
       </motion.header>
 
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+
+        {/* ⭐ Bannière limite atteinte */}
+        {!canSubmit && nextSubmitDate && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-gradient-to-r from-amber-50 to-red-50 dark:from-amber-900/20 dark:to-red-900/20 border border-amber-200 dark:border-amber-800"
+          >
+            <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0">
+              <Shield size={22} className="text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                Limite hebdomadaire atteinte
+              </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                Prochaine soumission dans {timeLeft.days}j {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {[
+                { value: timeLeft.days, label: 'Jours' },
+                { value: timeLeft.hours, label: 'Heures' },
+                { value: timeLeft.minutes, label: 'Min' },
+                { value: timeLeft.seconds, label: 'Sec' },
+              ].map((unit, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-lg bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-sm font-bold text-amber-600 dark:text-amber-400">
+                    {String(unit.value).padStart(2, '0')}
+                  </div>
+                  <span className="text-[10px] text-amber-500 dark:text-amber-500 mt-0.5 font-medium">
+                    {unit.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* ⭐ Bannière encadrant */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
           {loadingEncadrant ? (
             <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
               <Loader2 size={16} className="animate-spin text-purple-500" />
-              <span className={`text-sm ${muted}`}>Chargement des informations d'encadrement...</span>
+              <span className={`text-sm ${muted}`}>Chargement...</span>
             </div>
           ) : monEncadrant ? (
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
@@ -361,24 +468,16 @@ export default function ReportsPage() {
                 <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
                   Demande en attente auprès de {demandeEnAttente.encadrant?.nom}
                 </p>
-                <p className="text-xs text-amber-600/70 dark:text-amber-400/70">
-                  Vous pourrez soumettre des rapports dès que votre demande sera acceptée.
-                </p>
               </div>
             </div>
           ) : (
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
               <AlertCircle size={18} className="text-red-600 dark:text-red-400 shrink-0" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-red-700 dark:text-red-400">
-                  Aucun encadrant assigné
-                </p>
-                <p className="text-xs text-red-600/70 dark:text-red-400/70">
-                  Faites une demande d'encadrement depuis le dashboard avant de soumettre des rapports.
-                </p>
+                <p className="text-sm font-medium text-red-700 dark:text-red-400">Aucun encadrant assigné</p>
               </div>
               <button onClick={() => navigate('/student')}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 transition-colors">
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
                 Demander
               </button>
             </div>
@@ -465,7 +564,7 @@ export default function ReportsPage() {
                 ? 'Commencez par soumettre votre premier rapport de stage.'
                 : 'Aucun rapport ne correspond à votre recherche.'}
             </p>
-            {monEncadrant && (
+            {monEncadrant && canSubmit && (
               <button onClick={openModal}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
                 style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}>
@@ -500,7 +599,7 @@ export default function ReportsPage() {
                         <h3 className="font-semibold text-sm truncate">{rapport.titre}</h3>
                         {rapport.fichierNom && (
                           <div className={`inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                            📎 <span className="truncate max-w-[180px]">{rapport.fichierNom}</span>
+                            <Paperclip size={10} /> <span className="truncate max-w-[180px]">{rapport.fichierNom}</span>
                           </div>
                         )}
                         <div className="flex items-center gap-3 mt-2 flex-wrap">
@@ -532,6 +631,90 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
+
+      {/* ══ Submission Locked Overlay ════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showLockOverlay && !canSubmit && nextSubmitDate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)' }}
+            onClick={() => setShowLockOverlay(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 30 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className={`w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-white'}`}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Top gradient bar */}
+              <div className="h-1.5" style={{ background: 'linear-gradient(90deg, #f59e0b, #ef4444, #f59e0b)' }} />
+
+              <div className="p-8 text-center">
+                {/* Animated icon */}
+                <motion.div
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+                  className={`w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center ${isDark ? 'bg-amber-900/30' : 'bg-amber-50'}`}
+                >
+                  <Shield size={36} className={isDark ? 'text-amber-400' : 'text-amber-600'} />
+                </motion.div>
+
+                {/* Title */}
+                <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Submission Limit Reached
+                </h2>
+                <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  You can only submit one report per week. Your next submission unlocks in:
+                </p>
+
+                {/* Countdown boxes */}
+                <div className="flex items-center justify-center gap-3 mb-6">
+                  {[
+                    { value: timeLeft.days, label: 'Days' },
+                    { value: timeLeft.hours, label: 'Hours' },
+                    { value: timeLeft.minutes, label: 'Min' },
+                    { value: timeLeft.seconds, label: 'Sec' },
+                  ].map((unit, i) => (
+                    <div key={i} className="flex flex-col items-center">
+                      <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold ${
+                        isDark ? 'bg-gray-800 text-amber-400' : 'bg-amber-50 text-amber-600'
+                      }`}>
+                        {String(unit.value).padStart(2, '0')}
+                      </div>
+                      <span className={`text-xs mt-1.5 font-medium ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                        {unit.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Next available date */}
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${
+                  isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-600'
+                }`}>
+                  <Calendar size={14} />
+                  Available {nextSubmitDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+
+                {/* Dismiss button */}
+                <button
+                  onClick={() => setShowLockOverlay(false)}
+                  className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold transition-colors ${
+                    isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  I understand
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ══ Modal Nouvelle Soumission ════════════════════════════════════════ */}
       <AnimatePresence>
@@ -601,7 +784,7 @@ export default function ReportsPage() {
                           className={`w-full text-sm px-4 py-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500 transition-all ${input}`} />
                       </div>
 
-                      {/* ⭐ Encadrant AUTO-REMPLI */}
+                      {/* Encadrant AUTO-REMPLI */}
                       <div>
                         <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>
                           Encadrant
@@ -698,7 +881,7 @@ export default function ReportsPage() {
                         setStep(2)
                       }} className="w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2"
                         style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}>
-                        Vérifier avant de soumettre →
+                        Vérifier avant de soumettre
                       </button>
                     </motion.div>
                   ) : (
@@ -706,7 +889,6 @@ export default function ReportsPage() {
                       initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
                       className="space-y-4">
 
-                      {/* Récapitulatif */}
                       <div className={`rounded-xl p-4 space-y-3 ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
                         <div>
                           <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Titre</p>
@@ -735,7 +917,6 @@ export default function ReportsPage() {
                         )}
                       </div>
 
-                      {/* Barre upload */}
                       {submitting && (
                         <div>
                           <div className="flex justify-between text-xs mb-1">
@@ -749,7 +930,6 @@ export default function ReportsPage() {
                         </div>
                       )}
 
-                      {/* Avertissement */}
                       <div className={`flex items-start gap-2 text-xs px-3 py-2.5 rounded-xl ${isDark ? 'bg-amber-900/20 text-amber-400' : 'bg-amber-50 text-amber-700'}`}>
                         <AlertCircle size={13} className="mt-0.5 shrink-0" />
                         Une fois soumis, le rapport sera transmis à <strong className="mx-0.5">{monEncadrant?.nom}</strong> et ne pourra plus être modifié.
@@ -758,7 +938,7 @@ export default function ReportsPage() {
                       <div className="flex gap-2">
                         <button onClick={() => setStep(1)} disabled={submitting}
                           className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
-                          ← Modifier
+                          Modifier
                         </button>
                         <button onClick={handleSubmit} disabled={submitting}
                           className="flex-1 py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
@@ -825,7 +1005,6 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* Fichier joint avec bouton télécharger */}
                 {selected.fichierNom && (
                   <div>
                     <p className={`text-xs font-semibold uppercase tracking-wider ${muted} mb-2`}>Fichier soumis</p>
@@ -842,7 +1021,6 @@ export default function ReportsPage() {
                   </div>
                 )}
 
-                {/* ⭐ Commentaires — chargés via openRapport */}
                 {selected.commentaires && selected.commentaires.length > 0 && (
                   <div>
                     <p className={`text-xs font-semibold uppercase tracking-wider ${muted} mb-2`}>
@@ -876,7 +1054,7 @@ export default function ReportsPage() {
                 {selected.statut === 'VALIDE' && (
                   <div className={`flex items-start gap-2 p-3 rounded-xl text-sm ${isDark ? 'bg-emerald-900/20 text-emerald-400' : 'bg-emerald-50 text-emerald-700'}`}>
                     <CheckCircle size={15} className="mt-0.5 shrink-0" />
-                    Ce rapport a été validé par votre encadrant. Félicitations !
+                    Ce rapport a été validé par votre encadrant.
                   </div>
                 )}
               </div>
