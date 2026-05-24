@@ -560,10 +560,21 @@ export default function ProfilePage() {
                   return (
                     <motion.button key={day} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={() => handleDayClick(day)}
                       className={`relative aspect-square rounded-xl text-sm font-medium flex items-center justify-center transition-all ${
-                        isToday ? "bg-blue-600 text-white" : isSel ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" : isDark ? "hover:bg-gray-800 text-gray-200" : "hover:bg-gray-100 text-gray-700"
+                        evType === "important"
+                          ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
+                          : evType === "normal"
+                          ? isDark
+                            ? "bg-orange-900/40 text-orange-300"
+                            : "bg-orange-100 text-orange-700"
+                          : isToday
+                          ? "bg-blue-600 text-white"
+                          : isSel
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                          : isDark
+                          ? "hover:bg-gray-800 text-gray-200"
+                          : "hover:bg-gray-100 text-gray-700"
                       }`}>
                       {day}
-                      {evType && (<span className={`absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${isToday ? "bg-white" : evType === "important" ? "bg-red-500" : "bg-orange-400"}`} />)}
                     </motion.button>
                   );
                 })}
