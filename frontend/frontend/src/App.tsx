@@ -14,6 +14,7 @@ import ProfilePage from './pages/ProfilePage'
 import ReportsPage from './pages/Reportspage'
 import SettingsPage from './pages/SettingsPage'
 import SupportPage from './pages/Supportpage'
+import AdminSupportPage from './pages/AdminSupportPage'
 import NotificationsPage from './pages/NotificationsPage'
 import MessagesPage from './pages/MessagesPage'
 
@@ -62,9 +63,11 @@ function App() {
 
         {/* Admin */}
         <Route path="/admin"                element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+        <Route path="/admin/support"        element={<PrivateRoute><AdminSupportPage /></PrivateRoute>} />
         <Route path="/admin/users"          element={<PrivateRoute><AdminUsersPage /></PrivateRoute>} />
         <Route path="/admin/analytics"      element={<PrivateRoute><AdminAnalyticsPage /></PrivateRoute>} />
         <Route path="/admin/notifications"  element={<PrivateRoute><NotificationsPage /></PrivateRoute>} /> {/* ✅ AJOUTÉ */}
+               
                
 
         {/* Partagées */}
