@@ -5,7 +5,7 @@ import {
   Clock, Star, Download, MessageSquare, Eye,
   Filter, Loader2, ChevronRight, Send, AlertCircle,
   CheckCircle2, Award, BarChart3, User, Calendar,
-  FileDown, ThumbsUp, ThumbsDown
+  FileDown, ThumbsUp, ThumbsDown, CalendarDays
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
@@ -24,6 +24,7 @@ interface Rapport {
   statut: 'SOUMIS' | 'VALIDE' | 'REJETE'
   dateDepot: string
   score?: number
+  deadlineId?: number | null // ⭐ AJOUTÉ
   auteur?: { id: number; nom: string; email: string }
   encadrant?: { id: number; nom: string }
   commentaires?: Commentaire[]
@@ -34,6 +35,15 @@ interface Commentaire {
   contenu: string
   dateCreation: string
   auteur?: { id: number; nom: string }
+}
+
+// ⭐ AJOUTÉ : Interface Deadline
+interface Deadline {
+  id: number
+  type?: string
+  titre?: string
+  dateLimite?: string
+  dateEcheance?: string
 }
 
 // ─── Statut config ────────────────────────────────────────────────────────────
@@ -85,6 +95,7 @@ export default function SupervisorReportsPage() {
 
   // ── Data ─────────────────────────────────────────────────────────────────
   const [rapports,  setRapports]  = useState<Rapport[]>([])
+  const [deadlines, setDeadlines] = useState<Deadline[]>([]) // ⭐ AJOUTÉ
   const [loading,   setLoading]   = useState(true)
   const [selected,  setSelected]  = useState<Rapport | null>(null)
 
@@ -99,6 +110,12 @@ export default function SupervisorReportsPage() {
   const [sendingCom,  setSendingCom]  = useState(false)
   const [downloadingId, setDownloadingId] = useState<number | null>(null)
   const commentRef = useRef<HTMLTextAreaElement>(null)
+
+  // ⭐ Helper pour trouver la deadline par ID
+  const getDeadline = (deadlineId?: number | null) => {
+    if (!deadlineId) return null
+    return deadlines.find(d => d.id === deadlineId)
+  }
 
   // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchRapports = async () => {
@@ -118,15 +135,28 @@ export default function SupervisorReportsPage() {
     }
   }
 
-  useEffect(() => { fetchRapports() }, [])
+  // ⭐ Fetch deadlines de l'encadrant
+  const fetchDeadlines = async () => {
+    try {
+      if (userId) {
+        const res = await api.get<Deadline[]>(`/deadlines/encadrant/${userId}`)
+        setDeadlines(res.data)
+      }
+    } catch {
+      console.error('Erreur chargement deadlines')
+    }
+  }
+
+  useEffect(() => { 
+    fetchRapports()
+    fetchDeadlines() // ⭐ AJOUTÉ
+  }, [])
 
   // ── Ouvrir un rapport ────────────────────────────────────────────────────
-  // ⭐ Modifié — Charger les commentaires depuis l'API
   const openRapport = async (r: Rapport) => {
     setSelected(r)
     setScore(r.score ?? 0)
     setComment('')
-    // Charger les commentaires
     try {
       const res = await api.get(`/commentaires/rapport/${r.id}`)
       setSelected({ ...r, commentaires: res.data })
@@ -193,7 +223,7 @@ export default function SupervisorReportsPage() {
     }
   }
 
-  // ⭐ NOUVEAU — Télécharger le fichier avec JWT token ──────────────────────
+  // ── Télécharger le fichier ───────────────────────────────────────────────
   const handleDownload = async (rapportId: number, fileName: string) => {
     setDownloadingId(rapportId)
     try {
@@ -216,7 +246,7 @@ export default function SupervisorReportsPage() {
     }
   }
 
-  // ⭐ MODIFIÉ — Export avec handleDownload au lieu de window.open ──────────
+  // ── Export ───────────────────────────────────────────────────────────────
   const handleExport = () => {
     if (!selected) return
     if (selected.fichierNom) {
@@ -360,6 +390,7 @@ export default function SupervisorReportsPage() {
             ) : (
               filtered.map((rapport, i) => {
                 const cfg = STATUT[rapport.statut]
+                const dl = getDeadline(rapport.deadlineId) // ⭐ Trouver la deadline
                 return (
                   <motion.button key={rapport.id}
                     initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
@@ -385,7 +416,7 @@ export default function SupervisorReportsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate">{rapport.titre}</p>
                         <p className={`text-xs truncate ${muted}`}>{rapport.auteur?.nom ?? '—'}</p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className={`text-xs ${muted}`}>
                             {new Date(rapport.dateDepot).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                           </span>
@@ -397,6 +428,13 @@ export default function SupervisorReportsPage() {
                           ) : null}
                           {rapport.score && rapport.score > 0 && (
                             <span className="text-xs text-amber-500 font-bold">⭐ {rapport.score}/5</span>
+                          )}
+                          {/* ⭐ Deadline associée dans la liste */}
+                          {dl && (
+                            <span className="text-xs text-purple-500 dark:text-purple-400 flex items-center gap-0.5">
+                              <CalendarDays size={10} className="shrink-0" />
+                              {dl.type || dl.titre}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -451,7 +489,6 @@ export default function SupervisorReportsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {/* ⭐ Export / Download bouton */}
                     <button onClick={handleExport} disabled={downloadingId === selected.id}
                       className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors disabled:opacity-50 ${
                         isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-purple-50 hover:bg-purple-100 text-purple-700'
@@ -489,7 +526,28 @@ export default function SupervisorReportsPage() {
                     )}
                   </div>
 
-                  {/* ⭐ Fichier joint — avec bouton télécharger corrigé */}
+                  {/* ⭐ Deadline associée (carte dédiée) */}
+                  {selected.deadlineId && getDeadline(selected.deadlineId) && (() => {
+                    const dl = getDeadline(selected.deadlineId)!
+                    return (
+                      <div className={`rounded-2xl border ${card} p-4 flex items-center gap-3`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'}`}>
+                          <CalendarDays size={18} className="text-purple-500" />
+                        </div>
+                        <div className="flex-1">
+                          <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Deadline associée</p>
+                          <p className="text-sm font-semibold">{dl.type || dl.titre}</p>
+                          <p className={`text-xs ${muted}`}>
+                            {dl.dateLimite 
+                              ? `📅 ${new Date(dl.dateLimite).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}` 
+                              : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Fichier joint */}
                   {selected.fichierNom && (
                     <div className={`rounded-2xl border ${card} p-4`}>
                       <div className="flex items-center gap-3">
@@ -515,7 +573,6 @@ export default function SupervisorReportsPage() {
                             )}
                           </div>
                         </div>
-                        {/* ⭐ FIX : handleDownload au lieu de window.open */}
                         <button
                           onClick={() => handleDownload(selected.id, selected.fichierNom || 'rapport.pdf')}
                           disabled={downloadingId === selected.id}

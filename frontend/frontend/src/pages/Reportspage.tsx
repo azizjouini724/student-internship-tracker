@@ -6,7 +6,7 @@ import {
   ChevronDown, Eye, Send, BookOpen, Calendar,
   ArrowLeft, Loader2, Upload,
   Trash2, Download, Archive, Image, Paperclip, MessageSquare,
-  UserCheck, Shield
+  UserCheck, Shield, CalendarDays
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
@@ -24,6 +24,7 @@ interface Rapport {
   fichierTaille?: number
   statut: 'SOUMIS' | 'VALIDE' | 'REJETE'
   dateDepot: string
+  deadlineId?: number | null
   encadrant?: { id: number; nom: string }
   auteur?: { id: number; nom: string }
   commentaires?: { id: number; contenu: string; auteur: { nom: string }; dateCreation: string }[]
@@ -36,6 +37,14 @@ interface Demande {
   etudiant?: { id: number; nom: string }
   message: string
   dateDemande: string
+}
+
+interface Deadline {
+  id: number
+  type?: string
+  titre?: string
+  dateLimite?: string
+  dateEcheance?: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -108,6 +117,9 @@ export default function ReportsPage() {
   const [demandeEnAttente, setDemandeEnAttente] = useState<Demande | null>(null)
   const [loadingEncadrant, setLoadingEncadrant] = useState(true)
 
+  // ⭐ Deadlines pour le sélecteur
+  const [deadlines, setDeadlines] = useState<Deadline[]>([])
+
   // ── Filters ──────────────────────────────────────────────────────────────
   const [search,     setSearch]     = useState('')
   const [filterStat, setFilterStat] = useState<'ALL'|'SOUMIS'|'VALIDE'|'REJETE'>('ALL')
@@ -122,6 +134,7 @@ export default function ReportsPage() {
   const [titre,        setTitre]        = useState('')
   const [fichier,      setFichier]      = useState<File | null>(null)
   const [uploadPct,    setUploadPct]    = useState(0)
+  const [selectedDeadlineId, setSelectedDeadlineId] = useState<number | null>(null) // ⭐ AJOUTÉ
 
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -162,13 +175,26 @@ export default function ReportsPage() {
     }
   }
 
+  // ⭐ Fetch deadlines de l'encadrant
+  const fetchDeadlines = async (encadrantId: number) => {
+    try {
+      const res = await api.get<Deadline[]>(`/deadlines/encadrant/${encadrantId}`)
+      setDeadlines(res.data)
+    } catch {
+      console.error('Erreur chargement deadlines')
+    }
+  }
+
   const fetchMonEncadrant = async () => {
     setLoadingEncadrant(true)
     try {
       const res = await api.get<Demande[]>(`/demandes/etudiant/${userId}`)
       const acceptee = res.data.find(d => d.statut === 'ACCEPTE')
       const enAttente = res.data.find(d => d.statut === 'EN_ATTENTE')
-      if (acceptee?.encadrant) setMonEncadrant(acceptee.encadrant)
+      if (acceptee?.encadrant) {
+        setMonEncadrant(acceptee.encadrant)
+        fetchDeadlines(acceptee.encadrant.id) // ⭐ Charger les deadlines de l'encadrant
+      }
       if (enAttente) setDemandeEnAttente(enAttente)
     } catch {
       console.error('Erreur chargement encadrant')
@@ -211,18 +237,15 @@ export default function ReportsPage() {
   // ⭐ Countdown en temps réel
   useEffect(() => {
     if (!nextSubmitDate) return
-
     const updateCountdown = () => {
       const now = new Date()
       const diff = nextSubmitDate.getTime() - now.getTime()
-
       if (diff <= 0) {
         setCanSubmit(true)
         setNextSubmitDate(null)
         setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 })
         return
       }
-
       setTimeLeft({
         days: Math.floor(diff / (1000 * 60 * 60 * 24)),
         hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
@@ -230,7 +253,6 @@ export default function ReportsPage() {
         seconds: Math.floor((diff / 1000) % 60),
       })
     }
-
     updateCountdown()
     const interval = setInterval(updateCountdown, 1000)
     return () => clearInterval(interval)
@@ -285,6 +307,10 @@ export default function ReportsPage() {
       formData.append('auteurId',    userId ?? '')
       formData.append('encadrantId', String(monEncadrant.id))
       formData.append('fichier',     fichier)
+      // ⭐ AJOUTÉ : Envoyer le deadlineId
+      if (selectedDeadlineId) {
+        formData.append('deadlineId', String(selectedDeadlineId))
+      }
 
       const res = await api.post<Rapport>('/rapports', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -295,12 +321,10 @@ export default function ReportsPage() {
       setRapports(prev => [res.data, ...prev])
       toast.success('Rapport soumis avec succès !')
       closeModal()
-      // ⭐ Re-vérifier la limite après soumission
       checkCanSubmit()
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Erreur lors de la soumission'
       toast.error(errorMsg)
-      // ⭐ Si erreur de limite, mettre à jour le state
       if (errorMsg.includes('semaine') || errorMsg.includes('week')) {
         setCanSubmit(false)
         checkCanSubmit()
@@ -312,7 +336,6 @@ export default function ReportsPage() {
   }
 
   const openModal = () => {
-    // ⭐ Vérifier la limite avant d'ouvrir
     if (!canSubmit) {
       setShowLockOverlay(true)
       return
@@ -331,7 +354,7 @@ export default function ReportsPage() {
 
   const closeModal = () => {
     setShowModal(false); setStep(1)
-    setTitre(''); setFichier(null)
+    setTitre(''); setFichier(null); setSelectedDeadlineId(null) // ⭐ Reset deadline
   }
 
   const handleDownload = async (rapportId: number, fileName: string) => {
@@ -353,6 +376,13 @@ export default function ReportsPage() {
     }
   }
 
+  // ── Trouver le nom de la deadline sélectionnée (pour confirmation) ────────
+  const getSelectedDeadlineName = () => {
+    if (!selectedDeadlineId) return null
+    const dl = deadlines.find(d => d.id === selectedDeadlineId)
+    return dl ? (dl.type || dl.titre) : null
+  }
+
   // ── Filtered ─────────────────────────────────────────────────────────────
   const filtered = rapports
     .filter(r => filterStat === 'ALL' || r.statut === filterStat)
@@ -368,6 +398,19 @@ export default function ReportsPage() {
   const card  = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
   const input = isDark ? 'bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500' : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
   const muted = isDark ? 'text-gray-400' : 'text-gray-500'
+
+  // ⭐ Deadlines actives (non expirées, triées par date)
+  const activeDeadlines = deadlines
+    .filter(d => {
+      const dateStr = d.dateLimite || d.dateEcheance
+      if (!dateStr) return false
+      return new Date(dateStr).getTime() > Date.now()
+    })
+    .sort((a, b) => {
+      const da = new Date(a.dateLimite || a.dateEcheance || '').getTime()
+      const db = new Date(b.dateLimite || b.dateEcheance || '').getTime()
+      return da - db
+    })
 
   return (
     <div className={`min-h-screen ${bg} ${isDark ? 'text-gray-100' : 'text-gray-900'} font-sans`}>
@@ -415,9 +458,7 @@ export default function ReportsPage() {
               <Shield size={22} className="text-amber-600 dark:text-amber-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
-                Limite hebdomadaire atteinte
-              </p>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Limite hebdomadaire atteinte</p>
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
                 Prochaine soumission dans {timeLeft.days}j {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s
               </p>
@@ -433,9 +474,7 @@ export default function ReportsPage() {
                   <div className="w-10 h-10 rounded-lg bg-white dark:bg-gray-800 shadow-sm flex items-center justify-center text-sm font-bold text-amber-600 dark:text-amber-400">
                     {String(unit.value).padStart(2, '0')}
                   </div>
-                  <span className="text-[10px] text-amber-500 dark:text-amber-500 mt-0.5 font-medium">
-                    {unit.label}
-                  </span>
+                  <span className="text-[10px] text-amber-500 dark:text-amber-500 mt-0.5 font-medium">{unit.label}</span>
                 </div>
               ))}
             </div>
@@ -577,6 +616,10 @@ export default function ReportsPage() {
             {filtered.map((rapport, i) => {
               const cfg = STATUT_CONFIG[rapport.statut]
               const Icon = cfg.icon
+              // ⭐ Trouver le nom de la deadline liée
+              const linkedDeadline = rapport.deadlineId 
+                ? deadlines.find(d => d.id === rapport.deadlineId) 
+                : null
               return (
                 <motion.div key={rapport.id}
                   initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
@@ -612,6 +655,12 @@ export default function ReportsPage() {
                               <BookOpen size={11} /> {rapport.encadrant.nom}
                             </span>
                           )}
+                          {/* ⭐ Afficher la deadline liée */}
+                          {linkedDeadline && (
+                            <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>
+                              <CalendarDays size={11} /> {linkedDeadline.type || linkedDeadline.titre}
+                            </span>
+                          )}
                           {(rapport.commentaires?.length ?? 0) > 0 && (
                             <span className={`text-xs flex items-center gap-1 ${muted}`}>
                               <MessageSquare size={11} /> {rapport.commentaires.length}
@@ -636,9 +685,7 @@ export default function ReportsPage() {
       <AnimatePresence>
         {showLockOverlay && !canSubmit && nextSubmitDate && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)' }}
             onClick={() => setShowLockOverlay(false)}
@@ -651,11 +698,8 @@ export default function ReportsPage() {
               className={`w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-white'}`}
               onClick={e => e.stopPropagation()}
             >
-              {/* Top gradient bar */}
               <div className="h-1.5" style={{ background: 'linear-gradient(90deg, #f59e0b, #ef4444, #f59e0b)' }} />
-
               <div className="p-8 text-center">
-                {/* Animated icon */}
                 <motion.div
                   animate={{ scale: [1, 1.05, 1] }}
                   transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
@@ -663,20 +707,16 @@ export default function ReportsPage() {
                 >
                   <Shield size={36} className={isDark ? 'text-amber-400' : 'text-amber-600'} />
                 </motion.div>
-
-                {/* Title */}
                 <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Submission Limit Reached
+                  Limite Hebdomadaire Atteinte
                 </h2>
                 <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  You can only submit one report per week. Your next submission unlocks in:
+                  Vous ne pouvez soumettre qu'un rapport par semaine. Prochaine soumission dans :
                 </p>
-
-                {/* Countdown boxes */}
                 <div className="flex items-center justify-center gap-3 mb-6">
                   {[
-                    { value: timeLeft.days, label: 'Days' },
-                    { value: timeLeft.hours, label: 'Hours' },
+                    { value: timeLeft.days, label: 'Jours' },
+                    { value: timeLeft.hours, label: 'Heures' },
                     { value: timeLeft.minutes, label: 'Min' },
                     { value: timeLeft.seconds, label: 'Sec' },
                   ].map((unit, i) => (
@@ -692,23 +732,19 @@ export default function ReportsPage() {
                     </div>
                   ))}
                 </div>
-
-                {/* Next available date */}
                 <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${
                   isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-600'
                 }`}>
                   <Calendar size={14} />
-                  Available {nextSubmitDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  Disponible le {nextSubmitDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </div>
-
-                {/* Dismiss button */}
                 <button
                   onClick={() => setShowLockOverlay(false)}
                   className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold transition-colors ${
                     isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                   }`}
                 >
-                  I understand
+                  J'ai compris
                 </button>
               </div>
             </motion.div>
@@ -782,6 +818,51 @@ export default function ReportsPage() {
                         <input type="text" value={titre} onChange={e => setTitre(e.target.value)}
                           placeholder="Ex: Rapport de stage — Semaine 3"
                           className={`w-full text-sm px-4 py-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500 transition-all ${input}`} />
+                      </div>
+
+                      {/* ⭐ SÉLECTION DEADLINE */}
+                      <div>
+                        <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>
+                          <span className="flex items-center gap-1.5"><CalendarDays size={12} /> Deadline associée *</span>
+                        </label>
+                        {activeDeadlines.length > 0 ? (
+                          <div className="space-y-2 max-h-40 overflow-y-auto">
+                            {activeDeadlines.map(dl => {
+                              const dlTitre = dl.type || dl.titre || 'Sans titre'
+                              const dlDate = dl.dateLimite || dl.dateEcheance
+                              const isSelected = selectedDeadlineId === dl.id
+                              return (
+                                <motion.button
+                                  key={dl.id}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => setSelectedDeadlineId(isSelected ? null : dl.id)}
+                                  className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all ${
+                                    isSelected
+                                      ? 'bg-blue-600 text-white ring-2 ring-blue-400'
+                                      : isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-200' : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+                                  }`}
+                                >
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                    isSelected ? 'bg-white/20' : 'bg-blue-100 dark:bg-blue-900/30'
+                                  }`}>
+                                    <CalendarDays size={14} className={isSelected ? 'text-white' : 'text-blue-500'} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{dlTitre}</p>
+                                    <p className={`text-xs ${isSelected ? 'text-white/70' : muted}`}>
+                                      {dlDate ? new Date(dlDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}
+                                    </p>
+                                  </div>
+                                  {isSelected && <Check size={16} className="shrink-0" />}
+                                </motion.button>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className={`p-3 rounded-xl text-center ${isDark ? 'bg-gray-800 text-gray-500' : 'bg-gray-50 text-gray-400'}`}>
+                            <p className="text-xs">Aucune deadline active</p>
+                          </div>
+                        )}
                       </div>
 
                       {/* Encadrant AUTO-REMPLI */}
@@ -877,6 +958,7 @@ export default function ReportsPage() {
 
                       <button onClick={() => {
                         if (!titre.trim()) { toast.error('Le titre est requis'); return }
+                        if (!selectedDeadlineId) { toast.error('Veuillez sélectionner une deadline'); return } // ⭐
                         if (!fichier) { toast.error('Veuillez joindre un fichier'); return }
                         setStep(2)
                       }} className="w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2"
@@ -894,6 +976,18 @@ export default function ReportsPage() {
                           <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Titre</p>
                           <p className="text-sm font-semibold mt-0.5">{titre}</p>
                         </div>
+                        {/* ⭐ Afficher la deadline sélectionnée */}
+                        {selectedDeadlineId && getSelectedDeadlineName() && (
+                          <div>
+                            <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Deadline</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <CalendarDays size={14} className="text-purple-500" />
+                              <p className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                                {getSelectedDeadlineName()}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                         <div>
                           <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Encadrant</p>
                           <div className="flex items-center gap-2 mt-1">
@@ -991,6 +1085,22 @@ export default function ReportsPage() {
                   <p className={`text-xs font-semibold uppercase tracking-wider ${muted} mb-1`}>Titre</p>
                   <p className="font-semibold text-base">{selected.titre}</p>
                 </div>
+
+                {/* ⭐ Deadline liée dans le drawer */}
+                {selected.deadlineId && (() => {
+                  const dl = deadlines.find(d => d.id === selected.deadlineId)
+                  return dl ? (
+                    <div className={`rounded-xl p-3 ${isDark ? 'bg-purple-900/20' : 'bg-purple-50'}`}>
+                      <p className={`text-xs ${muted} mb-0.5`}>Deadline associée</p>
+                      <div className="flex items-center gap-2">
+                        <CalendarDays size={14} className="text-purple-500" />
+                        <p className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                          {dl.type || dl.titre}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className={`rounded-xl p-3 ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>

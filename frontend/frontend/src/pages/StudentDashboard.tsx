@@ -47,10 +47,26 @@ export default function StudentDashboard() {
     fetchDeadlines()
   }, [])
 
-  // ⭐ Countdown deadline 24h
+  // ⭐ Countdown deadline 24h — avec vérification par deadlineId
   useEffect(() => {
     const calculateCountdown = () => {
       if (!deadlines || deadlines.length === 0) {
+        setUrgentDeadline(null)
+        setIsUrgent(false)
+        return
+      }
+
+      // ⭐ FIX : Exclure les deadlines pour lesquelles l'étudiant a DÉJÀ soumis un rapport (par ID)
+      const submittedDeadlineIds = rapports
+        .filter(r => r.statut === 'SOUMIS' || r.statut === 'VALIDE')
+        .map(r => r.deadlineId)
+        .filter((id: any): id is number => id !== null && id !== undefined)
+
+      const activeDeadlines = deadlines.filter((dl: any) => {
+        return !submittedDeadlineIds.includes(dl.id)
+      })
+
+      if (activeDeadlines.length === 0) {
         setUrgentDeadline(null)
         setIsUrgent(false)
         return
@@ -60,7 +76,7 @@ export default function StudentDashboard() {
       let nearestDiff = Infinity
       let nearestDL = null
 
-      for (const dl of deadlines) {
+      for (const dl of activeDeadlines) {
         const dateStr = dl.dateLimite || dl.dateEcheance
         if (!dateStr) continue
         const dlDate = new Date(dateStr).getTime()
@@ -88,7 +104,7 @@ export default function StudentDashboard() {
     calculateCountdown()
     const interval = setInterval(calculateCountdown, 1000)
     return () => clearInterval(interval)
-  }, [deadlines])
+  }, [deadlines, rapports])
 
   const fetchRapports = async () => {
     try {
@@ -353,14 +369,14 @@ export default function StudentDashboard() {
               </motion.button>
             </div>
 
-            {/* ⭐ Timer Deadline 24h */}
+            {/* ⭐ Timer Deadline 24h — DISPARAÎT si rapport soumis pour cette deadline */}
             {urgentDeadline && (
               <motion.div
                 animate={isUrgent ? { scale: [1, 1.08, 1], opacity: [1, 0.7, 1] } : {}}
                 transition={{ repeat: Infinity, duration: 0.8, ease: 'easeInOut' }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-lg cursor-pointer"
                 style={{ background: isUrgent ? 'linear-gradient(135deg, #dc2626, #991b1b)' : 'linear-gradient(135deg, #ef4444, #dc2626)' }}
-                onClick={() => navigate('/profile')}
+                onClick={() => navigate('/reports')}
                 title={`Deadline : ${urgentDeadline.type || urgentDeadline.titre}`}
               >
                 <Clock size={16} className="text-white" />
@@ -381,9 +397,7 @@ export default function StudentDashboard() {
               className="w-9 h-9 rounded-xl cursor-pointer"
             >
               {photoUrl ? (
-                <img src={photoUrl} alt="avatar"
-                  className="w-9 h-9 rounded-xl object-cover"
-                />
+                <img src={photoUrl} alt="avatar" className="w-9 h-9 rounded-xl object-cover" />
               ) : (
                 <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white text-sm font-bold">
                   {nom?.charAt(0).toUpperCase() || 'U'}
@@ -406,16 +420,26 @@ export default function StudentDashboard() {
             </p>
           </motion.div>
 
-          {/* ⭐ Bannière deadline urgente */}
+          {/* ⭐ Bannière deadline urgente — DISPARAÎT si rapport soumis */}
           {urgentDeadline && (
             <motion.div
               initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-              className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
+              className="mb-6 flex items-center justify-between px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
             >
-              <Clock className="w-5 h-5 text-red-500 flex-shrink-0" />
-              <p className="text-sm text-red-700 dark:text-red-400">
-                <span className="font-bold">Deadline imminente :</span> {urgentDeadline.type || urgentDeadline.titre} — dans {String(countdown.h).padStart(2, '0')}h{String(countdown.m).padStart(2, '0')}m{String(countdown.s).padStart(2, '0')}s
-              </p>
+              <div className="flex items-center gap-3">
+                <Clock className="w-5 h-5 text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-700 dark:text-red-400">
+                  <span className="font-bold">Deadline imminente :</span> {urgentDeadline.type || urgentDeadline.titre} — dans {String(countdown.h).padStart(2, '0')}h{String(countdown.m).padStart(2, '0')}m{String(countdown.s).padStart(2, '0')}s
+                </p>
+              </div>
+              <motion.button
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={() => navigate('/reports')}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-white text-xs font-semibold"
+                style={{ background: 'linear-gradient(135deg, #006c48, #059669)' }}
+              >
+                <Plus size={12} /> Soumettre
+              </motion.button>
             </motion.div>
           )}
 
@@ -521,9 +545,7 @@ export default function StudentDashboard() {
               transition={{ delay: 0.45 }}
               className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm mb-8"
             >
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
-                Mes Demandes d'Encadrement
-              </h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Mes Demandes d'Encadrement</h3>
               <div className="flex flex-col gap-3">
                 {demandes.map((demande, i) => (
                   <motion.div
@@ -538,9 +560,7 @@ export default function StudentDashboard() {
                         <UserCheck className="w-4 h-4 text-primary" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-800 dark:text-white">
-                          {demande.encadrant?.nom}
-                        </p>
+                        <p className="text-sm font-medium text-gray-800 dark:text-white">{demande.encadrant?.nom}</p>
                         <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
                           {new Date(demande.dateDemande).toLocaleDateString('fr-FR')}
                         </p>
@@ -553,9 +573,7 @@ export default function StudentDashboard() {
                         ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                         : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                     }`}>
-                      {demande.statut === 'ACCEPTE' ? 'Acceptee'
-                        : demande.statut === 'REFUSE' ? 'Refusee'
-                        : 'En attente'}
+                      {demande.statut === 'ACCEPTE' ? 'Acceptée' : demande.statut === 'REFUSE' ? 'Refusée' : 'En attente'}
                     </span>
                   </motion.div>
                 ))}
@@ -578,7 +596,6 @@ export default function StudentDashboard() {
                 View All
               </button>
             </div>
-
             <div className="flex flex-col gap-3">
               {rapports.length === 0 ? (
                 <div className="text-center py-12">
@@ -651,9 +668,7 @@ export default function StudentDashboard() {
               </div>
 
               <div className="mb-4">
-                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
-                  Choisir un encadrant
-                </label>
+                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">Choisir un encadrant</label>
                 <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
                   {encadrants.length === 0 ? (
                     <p className="text-sm text-gray-400 text-center py-4">Aucun encadrant disponible</p>
@@ -675,9 +690,7 @@ export default function StudentDashboard() {
                         </div>
                         <div>
                           <p className="text-sm font-medium">{enc.nom}</p>
-                          <p className={`text-xs ${selectedEncadrant?.id === enc.id ? 'text-white/70' : 'text-gray-400'}`}>
-                            {enc.email}
-                          </p>
+                          <p className={`text-xs ${selectedEncadrant?.id === enc.id ? 'text-white/70' : 'text-gray-400'}`}>{enc.email}</p>
                         </div>
                         {selectedEncadrant?.id === enc.id && <UserCheck className="w-4 h-4 ml-auto" />}
                       </motion.button>
@@ -691,7 +704,7 @@ export default function StudentDashboard() {
                 <textarea
                   value={messageDemande}
                   onChange={e => setMessageDemande(e.target.value)}
-                  placeholder="Bonjour, je souhaite etre encadre par vous..."
+                  placeholder="Bonjour, je souhaite être encadré par vous..."
                   rows={3}
                   className="w-full bg-blue-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-primary outline-none text-sm transition-all resize-none"
                 />

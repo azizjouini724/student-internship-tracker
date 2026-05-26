@@ -41,9 +41,14 @@ public class Rapport {
     @Column(name = "fichier_type")
     private String fichierType;
 
+    @Column(name = "deadline_id")
+    private Long deadlineId;
+
     /** Taille du fichier en octets */
     @Column(name = "fichier_taille")
     private Long fichierTaille;
+    @Column(name = "score")
+    private Integer score;
 
     // ── Statut ─────────────────────────────────────────────────────────────
     @Enumerated(EnumType.STRING)
