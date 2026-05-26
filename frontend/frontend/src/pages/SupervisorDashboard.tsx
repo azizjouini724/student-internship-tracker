@@ -4,7 +4,8 @@ import {
   LayoutDashboard, FileText, Bell, User,
   Settings, HelpCircle, Moon, Sun, LogOut,
   Users, CheckCircle, Clock, TrendingUp,
-  ChevronRight, X, Check, XCircle, Calendar, Plus, Search, Briefcase,MessageCircle
+  ChevronRight, X, Check, XCircle, Calendar, Plus, Search, Briefcase, MessageCircle,
+  CalendarDays, ChevronLeft, ChevronRight as ChevronRightIcon, AlertTriangle
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -17,6 +18,22 @@ import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
 import api from '../services/api'
 import NotificationBell from '../components/NotificationBell'
+
+// ─── Calendar Helper ──────────────────────────────────────────────────────────
+const MONTHS_FR = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+]
+const DAYS_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+
+const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate()
+const getFirstDayOfMonth = (year: number, month: number) => {
+  const day = new Date(year, month, 1).getDay()
+  return day === 0 ? 6 : day - 1 // Monday = 0
+}
+
+const formatDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export default function SupervisorDashboard() {
   const { nom, logout, photoUrl } = useAuthStore()
@@ -31,7 +48,39 @@ export default function SupervisorDashboard() {
   const [showCreateDeadline, setShowCreateDeadline] = useState(false)
   const [loadingAction, setLoadingAction] = useState<number | null>(null)
   const [loadingDeadline, setLoadingDeadline] = useState(false)
-  const [deadlineForm, setDeadlineForm] = useState({ type: '', dateLimite: '' })
+  const [deadlineForm, setDeadlineForm] = useState({ type: '', dateLimite: '', description: '' })
+
+  // ── Calendar state ────────────────────────────────────────────────────────
+  const [calYear, setCalYear] = useState(new Date().getFullYear())
+  const [calMonth, setCalMonth] = useState(new Date().getMonth())
+
+  // ── Deadline Limit Overlay ─────────────────────────────────────────────────
+  const [showLimitOverlay, setShowLimitOverlay] = useState(false)
+  const [nextDeadlineDate, setNextDeadlineDate] = useState<Date | null>(null)
+  const [timeLeftDL, setTimeLeftDL] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+
+  // ── Countdown effect ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!nextDeadlineDate) return
+    const update = () => {
+      const now = new Date()
+      const diff = nextDeadlineDate.getTime() - now.getTime()
+      if (diff <= 0) {
+        setNextDeadlineDate(null)
+        setTimeLeftDL({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+        return
+      }
+      setTimeLeftDL({
+        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+        minutes: Math.floor((diff / (1000 * 60)) % 60),
+        seconds: Math.floor((diff / 1000) % 60),
+      })
+    }
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [nextDeadlineDate])
 
   useEffect(() => { fetchData() }, [])
 
@@ -39,18 +88,14 @@ export default function SupervisorDashboard() {
     try {
       const userId = localStorage.getItem('userId')
       if (!userId) return
-
-      // ✅ FIX : Récupérer SEULEMENT les données de CET encadrant
       const [rapportsRes, etudiantsRes, deadlinesRes] = await Promise.all([
         api.get('/rapports'),
-        api.get('/users/encadrant/' + userId + '/etudiants'),   // ⭐ SES étudiants
-        api.get('/deadlines/encadrant/' + userId)                // ⭐ SES deadlines
+        api.get('/users/encadrant/' + userId + '/etudiants'),
+        api.get('/deadlines/encadrant/' + userId)
       ])
       setRapports(rapportsRes.data)
       setUsers(etudiantsRes.data)
       setDeadlines(deadlinesRes.data)
-
-      // Demandes d'encadrement
       const demandesRes = await api.get(`/demandes/encadrant/${userId}`)
       setDemandes(demandesRes.data)
     } catch {
@@ -71,28 +116,101 @@ export default function SupervisorDashboard() {
     }
   }
 
+  // ── Vérifier la limite AVANT d'ouvrir le modal ──────────────────────────
+  const checkAndOpenDeadlineModal = async () => {
+    try {
+      const userId = localStorage.getItem('userId')
+      if (!userId) return
+      const res = await api.get(`/deadlines/encadrant/${userId}`)
+      const allDeadlines = res.data
+
+      const now = new Date()
+      const day = now.getDay()
+      const diffToMonday = day === 0 ? -6 : 1 - day
+      const debutSemaine = new Date(now)
+      debutSemaine.setDate(now.getDate() + diffToMonday)
+      debutSemaine.setHours(0, 0, 0, 0)
+
+      const createdThisWeek = allDeadlines.filter((d: any) => {
+        if (!d.dateCreation && !d.dateLimite) return false
+        const dateStr = d.dateCreation || d.dateLimite
+        const date = new Date(dateStr)
+        return date >= debutSemaine
+      })
+
+      if (createdThisWeek.length > 0) {
+        const finSemaine = new Date(debutSemaine)
+        finSemaine.setDate(finSemaine.getDate() + 7)
+        setNextDeadlineDate(finSemaine)
+        setShowLimitOverlay(true)
+      } else {
+        setDeadlineForm({ type: '', dateLimite: '', description: '' })
+        setCalYear(new Date().getFullYear())
+        setCalMonth(new Date().getMonth())
+        setShowCreateDeadline(true)
+      }
+    } catch {
+      setDeadlineForm({ type: '', dateLimite: '', description: '' })
+      setCalYear(new Date().getFullYear())
+      setCalMonth(new Date().getMonth())
+      setShowCreateDeadline(true)
+    }
+  }
+
   const createDeadline = async () => {
     if (!deadlineForm.type || !deadlineForm.dateLimite) {
-      toast.error('Remplissez tous les champs')
+      toast.error('Titre et date requis')
       return
     }
     setLoadingDeadline(true)
     try {
       const userId = localStorage.getItem('userId')
-      // ✅ FIX : Envoyer l'encadrantId pour la notification automatique
-      await api.post('/deadlines', { ...deadlineForm, encadrantId: userId })
+      await api.post('/deadlines', {
+        type: deadlineForm.type,
+        dateLimite: deadlineForm.dateLimite,
+        description: deadlineForm.description,
+        encadrantId: userId
+      })
       toast.success('Deadline créée ! Vos étudiants seront notifiés.')
       setShowCreateDeadline(false)
-      setDeadlineForm({ type: '', dateLimite: '' })
+      setDeadlineForm({ type: '', dateLimite: '', description: '' })
       fetchData()
-    } catch {
-      toast.error('Erreur création deadline')
+    } catch (error: any) {
+      let errorMsg = 'Erreur inconnue'
+      if (typeof error.response?.data === 'string') {
+        errorMsg = error.response.data
+      } else if (error.response?.data?.error) {
+        errorMsg = error.response.data.error
+      } else if (error.response?.data?.message) {
+        errorMsg = error.response.data.message
+      }
+      const errorHeader = error.response?.headers?.['x-error-type'] || ''
+      const isLimitError =
+        errorHeader === 'LIMIT_ERROR' ||
+        errorMsg.toLowerCase().includes('limite') ||
+        errorMsg.toLowerCase().includes('hebdomadaire') ||
+        errorMsg.toLowerCase().includes('semaine') ||
+        errorMsg.toLowerCase().includes('deja')
+      if (isLimitError) {
+        const now = new Date()
+        const day = now.getDay()
+        const diffToMonday = day === 0 ? -6 : 1 - day
+        const debutSemaine = new Date(now)
+        debutSemaine.setDate(now.getDate() + diffToMonday)
+        debutSemaine.setHours(0, 0, 0, 0)
+        const finSemaine = new Date(debutSemaine)
+        finSemaine.setDate(finSemaine.getDate() + 7)
+        setNextDeadlineDate(finSemaine)
+        setShowLimitOverlay(true)
+        setShowCreateDeadline(false)
+      } else {
+        toast.error(errorMsg)
+      }
     } finally {
       setLoadingDeadline(false)
     }
   }
 
-  // ✅ FIX : users contient déjà seulement les étudiants de l'encadrant
   const etudiants = users
   const totalRapports = rapports.length
   const valides = rapports.filter(r => r.statut === 'VALIDE').length
@@ -149,18 +267,119 @@ export default function SupervisorDashboard() {
   ]
 
   const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard',     path: null },
-    { icon: FileText,        label: 'Reports',       path: '/supervisor/reports' },
-    { icon: Users,           label: 'Students',      path: '/supervisor/students' },
-    { icon: Calendar,        label: 'Deadlines',     path: '/supervisor/deadlines' },
-    { icon: MessageCircle,   label: 'Messages',      path: '/messages' },
-    { icon: Bell,            label: 'Notifications', path: '/notifications' },
-    { icon: User,            label: 'Profile',       path: '/profile' },
+    { icon: LayoutDashboard, label: 'Dashboard', path: null },
+    { icon: FileText, label: 'Reports', path: '/supervisor/reports' },
+    { icon: Users, label: 'Students', path: '/supervisor/students' },
+    { icon: Calendar, label: 'Deadlines', path: '/supervisor/deadlines' },
+    { icon: MessageCircle, label: 'Messages', path: '/messages' },
+    { icon: Bell, label: 'Notifications', path: '/notifications' },
+    { icon: User, label: 'Profile', path: '/profile' },
   ]
 
   const handleNavClick = (label: string, path: string | null) => {
     setActiveNav(label)
     if (path) navigate(path)
+  }
+
+  // ── Calendar rendering ──────────────────────────────────────────────────
+  const renderCalendar = () => {
+    const daysInMonth = getDaysInMonth(calYear, calMonth)
+    const firstDay = getFirstDayOfMonth(calYear, calMonth)
+    const today = new Date()
+    const todayStr = formatDateStr(today)
+    const selectedDate = deadlineForm.dateLimite
+
+    const prevMonth = () => {
+      if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1) }
+      else setCalMonth(calMonth - 1)
+    }
+    const nextMonth = () => {
+      if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1) }
+      else setCalMonth(calMonth + 1)
+    }
+
+    const cells: React.ReactNode[] = []
+
+    // Empty cells before first day
+    for (let i = 0; i < firstDay; i++) {
+      cells.push(<div key={`empty-${i}`} className="h-8" />)
+    }
+
+    // Day cells
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(calYear, calMonth, d)
+      const dateStr = formatDateStr(dateObj)
+      const isToday = dateStr === todayStr
+      const isSelected = dateStr === selectedDate
+      const isPast = dateObj < new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+      cells.push(
+        <motion.button
+          key={d}
+          whileHover={!isPast ? { scale: 1.15 } : {}}
+          whileTap={!isPast ? { scale: 0.9 } : {}}
+          disabled={isPast}
+          onClick={() => !isPast && setDeadlineForm(f => ({ ...f, dateLimite: dateStr }))}
+          className={`h-8 w-8 rounded-lg text-xs font-medium flex items-center justify-center transition-all
+            ${isPast ? 'text-gray-300 dark:text-gray-700 cursor-not-allowed' : 'cursor-pointer'}
+            ${isToday && !isSelected ? `ring-1 ${isDark ? 'ring-purple-500' : 'ring-purple-400'}` : ''}
+            ${isSelected
+              ? 'text-white shadow-lg'
+              : isPast ? '' : isDark ? 'text-gray-300 hover:bg-purple-900/30' : 'text-gray-700 hover:bg-purple-50'
+            }`}
+          style={isSelected ? { background: 'linear-gradient(135deg, #421384, #6d28d9)' } : {}}
+        >
+          {d}
+        </motion.button>
+      )
+    }
+
+    return (
+      <div className={`rounded-xl p-3 ${isDark ? 'bg-gray-800/50' : 'bg-purple-50/50'}`}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={prevMonth}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-purple-100 text-gray-500'}`}>
+            <ChevronLeft size={14} />
+          </button>
+          <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+            {MONTHS_FR[calMonth]} {calYear}
+          </span>
+          <button onClick={nextMonth}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-purple-100 text-gray-500'}`}>
+            <ChevronRightIcon size={14} />
+          </button>
+        </div>
+
+        {/* Day names */}
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {DAYS_FR.map(dn => (
+            <div key={dn} className={`h-6 flex items-center justify-center text-xs font-medium ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              {dn}
+            </div>
+          ))}
+        </div>
+
+        {/* Days grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {cells}
+        </div>
+
+        {/* Selected date display */}
+        {selectedDate && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
+              isDark ? 'bg-purple-900/30 text-purple-300' : 'bg-purple-100 text-purple-700'
+            }`}
+          >
+            <CalendarDays size={13} />
+            {new Date(selectedDate + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </motion.div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -252,7 +471,7 @@ export default function SupervisorDashboard() {
 
           <div className="flex items-center gap-3">
             <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-              onClick={() => setShowCreateDeadline(true)}
+              onClick={() => checkAndOpenDeadlineModal()}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium"
               style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
               <Calendar className="w-4 h-4" />ADD DEADLINE
@@ -281,12 +500,11 @@ export default function SupervisorDashboard() {
             </motion.button>
             <NotificationBell isDark={isDark} />
             {(() => {
-             
-              const photoUrl = localStorage.getItem('photoUrl')
-              return photoUrl ? (
+              const photo = localStorage.getItem('photoUrl')
+              return photo ? (
                 <motion.button whileHover={{ scale: 1.05 }} onClick={() => navigate('/profile')}
                   className="w-9 h-9 rounded-xl overflow-hidden ring-2 ring-purple-400/30">
-                  <img src={photoUrl} alt="avatar" className="w-full h-full object-cover" />
+                  <img src={photo} alt="avatar" className="w-full h-full object-cover" />
                 </motion.button>
               ) : (
                 <motion.button whileHover={{ scale: 1.05 }} onClick={() => navigate('/profile')}
@@ -464,7 +682,7 @@ export default function SupervisorDashboard() {
                   <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Dates limites</p>
                 </div>
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowCreateDeadline(true)}
+                  onClick={() => checkAndOpenDeadlineModal()}
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
                   style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
                   <Plus className="w-3.5 h-3.5" />
@@ -475,7 +693,7 @@ export default function SupervisorDashboard() {
                   <div className="text-center py-8">
                     <Calendar className="w-10 h-10 mx-auto mb-3 opacity-20 text-gray-400" />
                     <p className="text-sm text-gray-400 dark:text-gray-300">Aucune deadline</p>
-                    <button onClick={() => setShowCreateDeadline(true)}
+                    <button onClick={() => checkAndOpenDeadlineModal()}
                       className="mt-2 text-xs font-medium hover:opacity-70 transition-opacity" style={{ color: '#421384' }}>
                       + Ajouter une deadline
                     </button>
@@ -501,7 +719,7 @@ export default function SupervisorDashboard() {
         </div>
       </main>
 
-      {/* MODAL DEMANDES */}
+      {/* ══ MODAL DEMANDES ════════════════════════════════════════════════════════ */}
       <AnimatePresence>
         {showDemandesModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -540,15 +758,15 @@ export default function SupervisorDashboard() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           {photoUrl ? (
-                          <img src={photoUrl} alt="avatar"
-                            className="w-9 h-9 rounded-xl object-cover"
-                            onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
-                        ) : (
-                          <div className="w-9 h-9 rounded-xl bg-gray-900 flex items-center justify-center text-white text-sm font-bold">
-                            {nom?.charAt(0).toUpperCase() || 'A'}
-                          </div>
-                        )}
+                            <img src={photoUrl} alt="avatar"
+                              className="w-9 h-9 rounded-xl object-cover"
+                              onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-xl bg-gray-900 flex items-center justify-center text-white text-sm font-bold">
+                              {nom?.charAt(0).toUpperCase() || 'A'}
+                            </div>
+                          )}
                           <div>
                             <p className="text-sm font-semibold text-gray-800 dark:text-white">{demande.etudiant?.nom}</p>
                             <p className="text-xs text-gray-400 dark:text-gray-300">{demande.etudiant?.email}</p>
@@ -596,7 +814,7 @@ export default function SupervisorDashboard() {
         )}
       </AnimatePresence>
 
-      {/* MODAL CREATE DEADLINE */}
+      {/* ══ MODAL CREATE DEADLINE (nouveau design) ════════════════════════════════ */}
       <AnimatePresence>
         {showCreateDeadline && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -608,39 +826,171 @@ export default function SupervisorDashboard() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ type: 'spring', damping: 25 }}
-              className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
-              onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white text-lg">Nouvelle Deadline</h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Pour vos étudiants — ils seront notifiés</p>
+              className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-white'}`}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header gradient */}
+              <div className="px-6 pt-6 pb-4" style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(66,19,132,0.08)'}` }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
+                      <Plus size={16} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className={`font-bold text-base ${isDark ? 'text-white' : 'text-gray-900'}`}>Nouvelle Deadline</h3>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Pour vos étudiants — ils seront notifiés</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowCreateDeadline(false)}
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${isDark ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+                    <X size={16} />
+                  </button>
                 </div>
-                <button onClick={() => setShowCreateDeadline(false)}
-                  className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
-                  <X className="w-4 h-4" />
+              </div>
+
+              <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+                {/* Titre */}
+                <div>
+                  <label className={`text-xs font-semibold tracking-wider uppercase mb-2 block ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Titre *
+                  </label>
+                  <input type="text"
+                    placeholder="Ex: Rapport final, Soutenance..."
+                    value={deadlineForm.type}
+                    onChange={e => setDeadlineForm(f => ({ ...f, type: e.target.value }))}
+                    className={`w-full h-10 px-4 rounded-xl text-sm outline-none transition-all ${
+                      isDark
+                        ? 'bg-gray-800 border border-gray-700 text-gray-100 placeholder-gray-500 focus:border-purple-500'
+                        : 'bg-white border border-purple-200 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10'
+                    }`}
+                  />
+                </div>
+
+                {/* Calendrier interactif */}
+                <div>
+                  <label className={`text-xs font-semibold tracking-wider uppercase mb-2 block ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <span className="flex items-center gap-1.5"><CalendarDays size={12} /> Date limite *</span>
+                  </label>
+                  {renderCalendar()}
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className={`text-xs font-semibold tracking-wider uppercase mb-2 block ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Description
+                  </label>
+                  <textarea
+                    placeholder="Instructions, détails pour les étudiants..."
+                    rows={3}
+                    value={deadlineForm.description}
+                    onChange={e => setDeadlineForm(f => ({ ...f, description: e.target.value }))}
+                    className={`w-full px-4 py-3 rounded-xl text-sm outline-none resize-none transition-all ${
+                      isDark
+                        ? 'bg-gray-800 border border-gray-700 text-gray-100 placeholder-gray-500 focus:border-purple-500'
+                        : 'bg-white border border-purple-200 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10'
+                    }`}
+                  />
+                </div>
+
+                {/* Boutons */}
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => setShowCreateDeadline(false)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+                    Annuler
+                  </button>
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                    onClick={createDeadline} disabled={loadingDeadline}
+                    className="flex-1 py-2.5 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+                    style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
+                    {loadingDeadline ? (
+                      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                        className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+                    ) : <><Plus size={14} /> Créer la deadline</>}
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ══ Deadline Limit Overlay ════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showLimitOverlay && nextDeadlineDate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)' }}
+            onClick={() => setShowLimitOverlay(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 30 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className={`w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-white'}`}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="h-1.5" style={{ background: 'linear-gradient(90deg, #f59e0b, #ef4444, #f59e0b)' }} />
+
+              <div className="p-8 text-center">
+                <motion.div
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+                  className={`w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center ${isDark ? 'bg-amber-900/30' : 'bg-amber-50'}`}
+                >
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={isDark ? '#f59e0b' : '#d97706'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </motion.div>
+
+                <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Limite Hebdomadaire Atteinte
+                </h2>
+                <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Vous ne pouvez créer qu'une seule deadline par semaine. Votre prochaine création sera disponible dans :
+                </p>
+
+                <div className="flex items-center justify-center gap-3 mb-6">
+                  {[
+                    { value: timeLeftDL.days, label: 'Jours' },
+                    { value: timeLeftDL.hours, label: 'Heures' },
+                    { value: timeLeftDL.minutes, label: 'Min' },
+                    { value: timeLeftDL.seconds, label: 'Sec' },
+                  ].map((unit, i) => (
+                    <div key={i} className="flex flex-col items-center">
+                      <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold ${
+                        isDark ? 'bg-gray-800 text-amber-400' : 'bg-amber-50 text-amber-600'
+                      }`}>
+                        {String(unit.value).padStart(2, '0')}
+                      </div>
+                      <span className={`text-xs mt-1.5 font-medium ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                        {unit.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${
+                  isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-600'
+                }`}>
+                  <CalendarDays size={14} />
+                  Disponible le {nextDeadlineDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+
+                <button
+                  onClick={() => setShowLimitOverlay(false)}
+                  className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold transition-colors ${
+                    isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  J'ai compris
                 </button>
               </div>
-              <div className="mb-4">
-                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">Type de deadline</label>
-                <input type="text" placeholder="Ex: Rapport final, Soutenance..."
-                  value={deadlineForm.type} onChange={e => setDeadlineForm({ ...deadlineForm, type: e.target.value })}
-                  className="w-full bg-purple-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-purple-600 outline-none text-sm transition-all" />
-              </div>
-              <div className="mb-6">
-                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">Date limite</label>
-                <input type="date" value={deadlineForm.dateLimite}
-                  onChange={e => setDeadlineForm({ ...deadlineForm, dateLimite: e.target.value })}
-                  className="w-full bg-purple-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-purple-600 outline-none text-sm transition-all" />
-              </div>
-              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                onClick={createDeadline} disabled={loadingDeadline}
-                className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
-                {loadingDeadline ? (
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
-                ) : <><Calendar className="w-4 h-4" />CRÉER LA DEADLINE</>}
-              </motion.button>
             </motion.div>
           </motion.div>
         )}

@@ -31,23 +31,37 @@ public class DeadlineController {
         return ResponseEntity.ok(deadlines.stream().map(this::toMap).collect(Collectors.toList()));
     }
 
-    // ── Creer une deadline ─────────────────────────────────────────────────
+        // ── Creer une deadline ─────────────────────────────────────────────────
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createDeadline(@RequestBody Map<String, String> body) {
+    public ResponseEntity<?> createDeadline(@RequestBody Map<String, String> body) {
         String type = body.get("type");
-        LocalDate dateLimite = LocalDate.parse(body.get("dateLimite"));
+        String dateStr = body.get("dateLimite");
 
-        Long encadrantId = null;
-        if (body.containsKey("encadrantId") && body.get("encadrantId") != null) {
-            try {
-                encadrantId = Long.parseLong(body.get("encadrantId"));
-            } catch (NumberFormatException e) {
-                encadrantId = null;
-            }
+        // ⭐ Vérifier que les champs ne sont pas vides (évite le crash LocalDate.parse)
+        if (type == null || type.isBlank() || dateStr == null || dateStr.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Titre et date requis"));
         }
 
-        Deadline deadline = deadlineService.createDeadline(type, dateLimite, encadrantId);
-        return ResponseEntity.ok(toMap(deadline));
+        try {
+            LocalDate dateLimite = LocalDate.parse(dateStr);
+
+            Long encadrantId = null;
+            if (body.containsKey("encadrantId") && body.get("encadrantId") != null) {
+                try {
+                    encadrantId = Long.parseLong(body.get("encadrantId"));
+                } catch (NumberFormatException e) {
+                    encadrantId = null;
+                }
+            }
+
+            Deadline deadline = deadlineService.createDeadline(type, dateLimite, encadrantId);
+            return ResponseEntity.ok(toMap(deadline));
+        } catch (IllegalArgumentException e) {
+            // ⭐ Erreur de limite hebdomadaire : on ajoute un header pour que le frontend puisse la lire !
+            return ResponseEntity.badRequest()
+                    .header("X-Error-Type", "LIMIT_ERROR")
+                    .body(Map.of("error", e.getMessage()));
+        }
     }
 
     // ── Modifier une deadline ──────────────────────────────────────────────

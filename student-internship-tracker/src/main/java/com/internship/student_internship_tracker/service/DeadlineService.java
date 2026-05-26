@@ -12,6 +12,7 @@ import com.internship.student_internship_tracker.repository.PersonalEventReposit
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -41,15 +42,46 @@ public class DeadlineService {
             encadrant = userRepository.findById(encadrantId).orElse(null);
         }
 
+      
+        // ⭐ CONTRAINTE : 1 création par semaine par encadrant
+        if (encadrant != null) {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime debutSemaine = now.with(DayOfWeek.MONDAY)
+                    .withHour(0).withMinute(0).withSecond(0).withNano(0);
+
+            List<Deadline> createdThisWeek = deadlineRepository
+                    .findByEncadrantIdAndDateCreationAfter(encadrantId, debutSemaine);
+
+            // ⭐ DEBUG — Regarde ça dans le terminal Spring Boot
+            System.out.println("========== DEADLINE CREATION CHECK ==========");
+            System.out.println("encadrantId = " + encadrantId);
+            System.out.println("debutSemaine = " + debutSemaine);
+            System.out.println("now = " + now);
+            System.out.println("Deadlines creees cette semaine = " + createdThisWeek.size());
+
+            if (!createdThisWeek.isEmpty()) {
+                System.out.println("BLOQUE ! Déjà " + createdThisWeek.size() + " deadline(s) cette semaine");
+                LocalDateTime finSemaine = debutSemaine.plusWeeks(1);
+                throw new IllegalArgumentException(
+                    "Limite hebdomadaire atteinte : vous avez déjà créé une deadline cette semaine. "
+                    + "Prochaine création possible le "
+                    + finSemaine.format(DateTimeFormatter.ofPattern("dd/MM/yyyy à HH:mm"))
+                );
+            }
+            System.out.println("AUTORISE ! Aucune deadline cette semaine");
+            System.out.println("==============================================");
+        }
+
         Deadline deadline = Deadline.builder()
                 .type(type)
                 .dateLimite(dateLimite)
                 .encadrant(encadrant)
+                .dateCreation(LocalDateTime.now())
                 .build();
 
         Deadline saved = deadlineRepository.save(deadline);
 
-        // Notifier + Ajouter au calendrier de chaque étudiant encadré
+        // Notifier + Ajouter au calendrier de chaque etudiant encadre
         if (encadrant != null) {
             List<User> etudiants = userRepository.findByEncadrantIdAndRole(encadrantId, Role.ETUDIANT);
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -90,7 +122,7 @@ public class DeadlineService {
         return createDeadline(type, dateLimite, null);
     }
 
-    // ── Modifier une deadline + notifier ────────────────────────────────────
+    // ── Modifier une deadline (illimite) ─────────────────────────────────────
     public Deadline updateDeadline(Long id, String type, LocalDate dateLimite) {
         Deadline deadline = deadlineRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Deadline introuvable : " + id));
@@ -105,19 +137,20 @@ public class DeadlineService {
             deadline.setDateLimite(dateLimite);
         }
 
+        deadline.setDateModification(LocalDateTime.now());
+
         Deadline saved = deadlineRepository.save(deadline);
 
-        // Si la date a changé → notifier + mettre à jour calendrier
+        // Si la date a change -> notifier + mettre a jour calendrier
         if (dateChanged && deadline.getEncadrant() != null) {
             User encadrant = deadline.getEncadrant();
             List<User> etudiants = userRepository.findByEncadrantIdAndRole(encadrant.getId(), Role.ETUDIANT);
-            
+
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
             String ancienneStr = ancienneDate.format(formatter);
             String nouvelleStr = dateLimite.format(formatter);
 
             for (User etudiant : etudiants) {
-                // Notification
                 try {
                     Notification notif = Notification.builder()
                             .titre("Deadline modifiee")
@@ -132,12 +165,11 @@ public class DeadlineService {
                     System.out.println("Erreur notif update: " + e.getMessage());
                 }
 
-                // Mettre à jour le PersonalEvent
                 try {
                     List<PersonalEvent> events = personalEventRepository.findByUserIdOrderByDateAsc(etudiant.getId());
                     for (PersonalEvent event : events) {
                         if (event.getDate().equals(ancienneDate)
-                            && event.getTitre().contains(deadline.getType())) {
+                                && event.getTitre().contains(deadline.getType())) {
                             event.setDate(dateLimite);
                             personalEventRepository.save(event);
                         }

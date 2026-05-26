@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Calendar, Plus, Search, Edit3,
   Trash2, Check, X, Clock, AlertCircle,
-  CheckCircle2, Filter, ChevronDown, Save,
-  Loader2, CalendarDays, Flag
+  CheckCircle2, Save, Loader2, CalendarDays,
+  ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast, Toaster } from 'sonner'
@@ -18,9 +18,25 @@ interface Deadline {
   description?: string
   dateLimite?: string
   dateEcheance?: string
+  dateCreation?: string
   statut?: 'ACTIVE' | 'EXPIREE' | 'BIENTOT'
   encadrant?: { id: number; nom: string }
 }
+
+// ─── Calendar Helpers ─────────────────────────────────────────────────────────
+const MONTHS_FR = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+]
+const DAYS_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+
+const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate()
+const getFirstDayOfMonth = (year: number, month: number) => {
+  const day = new Date(year, month, 1).getDay()
+  return day === 0 ? 6 : day - 1
+}
+const formatDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const getDate = (d: Deadline) => d.dateLimite || d.dateEcheance || ''
@@ -29,7 +45,7 @@ const getTitre = (d: Deadline) => d.titre || d.type || 'Sans titre'
 const getStatut = (dateStr: string): 'EXPIREE' | 'BIENTOT' | 'ACTIVE' => {
   if (!dateStr) return 'ACTIVE'
   const diff = (new Date(dateStr).getTime() - Date.now()) / 86400000
-  if (diff < 0)  return 'EXPIREE'
+  if (diff < 0) return 'EXPIREE'
   if (diff <= 7) return 'BIENTOT'
   return 'ACTIVE'
 }
@@ -37,31 +53,31 @@ const getStatut = (dateStr: string): 'EXPIREE' | 'BIENTOT' | 'ACTIVE' => {
 const daysLeft = (dateStr: string) => {
   if (!dateStr) return null
   const diff = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000)
-  if (diff < 0)  return `Expirée il y a ${Math.abs(diff)} j`
+  if (diff < 0) return `Expirée il y a ${Math.abs(diff)} j`
   if (diff === 0) return "Aujourd'hui !"
   if (diff === 1) return 'Demain'
   return `Dans ${diff} jours`
 }
 
 const STATUT_CONFIG = {
-  ACTIVE:  { label: 'Active',   dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', border: 'border-l-emerald-500' },
-  BIENTOT: { label: 'Bientôt',  dot: 'bg-amber-500',   badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',         border: 'border-l-amber-500' },
-  EXPIREE: { label: 'Expirée',  dot: 'bg-gray-400',    badge: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',                border: 'border-l-gray-400' },
+  ACTIVE:  { label: 'Active',  dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', border: 'border-l-emerald-500' },
+  BIENTOT: { label: 'Bientôt', dot: 'bg-amber-500',   badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',        border: 'border-l-amber-500' },
+  EXPIREE: { label: 'Expirée', dot: 'bg-gray-400',    badge: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',               border: 'border-l-gray-400' },
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function SupervisorDeadlinesPage() {
   const navigate  = useNavigate()
   const isDark    = localStorage.getItem('theme') === 'dark'
-  const userId    = Number(localStorage.getItem('userId'))  // ⭐ AJOUT
+  const userId    = Number(localStorage.getItem('userId'))
 
   // ── Data ───────────────────────────────────────────────────────────────────
   const [deadlines, setDeadlines] = useState<Deadline[]>([])
   const [loading,   setLoading]   = useState(true)
 
   // ── Filters ────────────────────────────────────────────────────────────────
-  const [search,    setSearch]    = useState('')
-  const [filter,    setFilter]    = useState<'ALL' | 'ACTIVE' | 'BIENTOT' | 'EXPIREE'>('ALL')
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<'ALL' | 'ACTIVE' | 'BIENTOT' | 'EXPIREE'>('ALL')
 
   // ── Add / Edit modal ───────────────────────────────────────────────────────
   const [showModal,  setShowModal]  = useState(false)
@@ -69,15 +85,46 @@ export default function SupervisorDeadlinesPage() {
   const [form, setForm] = useState({ titre: '', dateLimite: '', description: '' })
   const [saving, setSaving] = useState(false)
 
+  // ── Calendar state ─────────────────────────────────────────────────────────
+  const [calYear, setCalYear] = useState(new Date().getFullYear())
+  const [calMonth, setCalMonth] = useState(new Date().getMonth())
+
   // ── Delete confirm ─────────────────────────────────────────────────────────
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // ── Deadline Limit Overlay ─────────────────────────────────────────────────
+  const [showLimitOverlay, setShowLimitOverlay] = useState(false)
+  const [nextDeadlineDate, setNextDeadlineDate] = useState<Date | null>(null)
+  const [timeLeftDL, setTimeLeftDL] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+
+  // ── Countdown effect ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!nextDeadlineDate) return
+    const update = () => {
+      const now = new Date()
+      const diff = nextDeadlineDate.getTime() - now.getTime()
+      if (diff <= 0) {
+        setNextDeadlineDate(null)
+        setTimeLeftDL({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+        return
+      }
+      setTimeLeftDL({
+        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+        minutes: Math.floor((diff / (1000 * 60)) % 60),
+        seconds: Math.floor((diff / 1000) % 60),
+      })
+    }
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [nextDeadlineDate])
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchDeadlines = async () => {
     setLoading(true)
     try {
-      // ⭐ FIX : Récupérer SEULEMENT les deadlines de CET encadrant
       const res = await api.get<Deadline[]>(`/deadlines/encadrant/${userId}`)
       setDeadlines(res.data)
     } catch {
@@ -89,13 +136,48 @@ export default function SupervisorDeadlinesPage() {
 
   useEffect(() => { fetchDeadlines() }, [userId])
 
-  // ── Open modal ─────────────────────────────────────────────────────────────
-  const openAdd = () => {
-    setEditTarget(null)
-    setForm({ titre: '', dateLimite: '', description: '' })
-    setShowModal(true)
+  // ── Vérifier la limite AVANT d'ouvrir le modal ──────────────────────────────
+  const checkAndOpenAddModal = async () => {
+    try {
+      const res = await api.get<Deadline[]>(`/deadlines/encadrant/${userId}`)
+      const allDeadlines = res.data
+
+      const now = new Date()
+      const day = now.getDay()
+      const diffToMonday = day === 0 ? -6 : 1 - day
+      const debutSemaine = new Date(now)
+      debutSemaine.setDate(now.getDate() + diffToMonday)
+      debutSemaine.setHours(0, 0, 0, 0)
+
+      const createdThisWeek = allDeadlines.filter((d: Deadline) => {
+        if (!d.dateCreation && !d.dateLimite) return false
+        const dateStr = d.dateCreation || d.dateLimite
+        const date = new Date(dateStr)
+        return date >= debutSemaine
+      })
+
+      if (createdThisWeek.length > 0) {
+        const finSemaine = new Date(debutSemaine)
+        finSemaine.setDate(finSemaine.getDate() + 7)
+        setNextDeadlineDate(finSemaine)
+        setShowLimitOverlay(true)
+      } else {
+        setEditTarget(null)
+        setForm({ titre: '', dateLimite: '', description: '' })
+        setCalYear(new Date().getFullYear())
+        setCalMonth(new Date().getMonth())
+        setShowModal(true)
+      }
+    } catch {
+      setEditTarget(null)
+      setForm({ titre: '', dateLimite: '', description: '' })
+      setCalYear(new Date().getFullYear())
+      setCalMonth(new Date().getMonth())
+      setShowModal(true)
+    }
   }
 
+  // ── Open edit modal ────────────────────────────────────────────────────────
   const openEdit = (d: Deadline) => {
     setEditTarget(d)
     setForm({
@@ -103,6 +185,14 @@ export default function SupervisorDeadlinesPage() {
       dateLimite:  getDate(d),
       description: d.description ?? '',
     })
+    if (d.dateLimite) {
+      const dateObj = new Date(d.dateLimite)
+      setCalYear(dateObj.getFullYear())
+      setCalMonth(dateObj.getMonth())
+    } else {
+      setCalYear(new Date().getFullYear())
+      setCalMonth(new Date().getMonth())
+    }
     setShowModal(true)
   }
 
@@ -115,42 +205,72 @@ export default function SupervisorDeadlinesPage() {
     setSaving(true)
     try {
       const payload = {
-        type:        form.titre,
-        titre:       form.titre,
-        dateLimite:  form.dateLimite,
+        type: form.titre,
+        titre: form.titre,
+        dateLimite: form.dateLimite,
         description: form.description,
-        encadrantId: String(userId),   // ⭐ FIX : Lier la deadline à l'encadrant
+        encadrantId: String(userId),
       }
 
       if (editTarget) {
-        const res = await api.put<Deadline>(`/deadlines/${editTarget.id}`, payload)
-        setDeadlines(prev => prev.map(d => d.id === editTarget.id ? res.data : d))
+        const res = await api.put(`/deadlines/${editTarget.id}`, payload)
+        setDeadlines(prev => prev.map(d => d.id === editTarget.id ? { ...d, ...res.data } : d))
         toast.success('Deadline modifiée !')
       } else {
-        const res = await api.post<Deadline>('/deadlines', payload)
+        const res = await api.post('/deadlines', payload)
         setDeadlines(prev => [res.data, ...prev])
         toast.success('Deadline créée !')
       }
       setShowModal(false)
-    } catch {
-      // fallback local
-      if (editTarget) {
-        setDeadlines(prev => prev.map(d => d.id === editTarget.id
-          ? { ...d, type: form.titre, titre: form.titre, dateLimite: form.dateLimite, description: form.description }
-          : d
-        ))
-        toast.success('Deadline modifiée !')
-      } else {
-        setDeadlines(prev => [{
-          id: Date.now(),
-          titre: form.titre, type: form.titre,
-          dateLimite: form.dateLimite,
-          description: form.description,
-          encadrant: { id: userId, nom: '' },
-        }, ...prev])
-        toast.success('Deadline créée !')
+    } catch (error: any) {
+      let errorMsg = 'Erreur inconnue'
+      if (typeof error.response?.data === 'string') {
+        errorMsg = error.response.data
+      } else if (error.response?.data?.error) {
+        errorMsg = error.response.data.error
+      } else if (error.response?.data?.message) {
+        errorMsg = error.response.data.message
       }
-      setShowModal(false)
+
+      const errorHeader = error.response?.headers?.['x-error-type'] || ''
+      const isLimitError =
+        errorHeader === 'LIMIT_ERROR' ||
+        errorMsg.toLowerCase().includes('limite') ||
+        errorMsg.toLowerCase().includes('hebdomadaire') ||
+        errorMsg.toLowerCase().includes('semaine') ||
+        errorMsg.toLowerCase().includes('deja')
+
+      if (isLimitError) {
+        const now = new Date()
+        const day = now.getDay()
+        const diffToMonday = day === 0 ? -6 : 1 - day
+        const debutSemaine = new Date(now)
+        debutSemaine.setDate(now.getDate() + diffToMonday)
+        debutSemaine.setHours(0, 0, 0, 0)
+        const finSemaine = new Date(debutSemaine)
+        finSemaine.setDate(finSemaine.getDate() + 7)
+
+        setNextDeadlineDate(finSemaine)
+        setShowLimitOverlay(true)
+        setShowModal(false)
+      } else {
+        toast.error(errorMsg)
+        if (editTarget) {
+          setDeadlines(prev => prev.map(d => d.id === editTarget.id
+            ? { ...d, type: form.titre, titre: form.titre, dateLimite: form.dateLimite, description: form.description }
+            : d
+          ))
+        } else {
+          setDeadlines(prev => [{
+            id: Date.now(),
+            titre: form.titre, type: form.titre,
+            dateLimite: form.dateLimite,
+            description: form.description,
+            encadrant: { id: userId, nom: '' },
+          }, ...prev])
+        }
+        setShowModal(false)
+      }
     } finally {
       setSaving(false)
     }
@@ -169,7 +289,7 @@ export default function SupervisorDeadlinesPage() {
     setDeleting(false)
   }
 
-  // ── Navigate back based on role ────────────────────────────────────────────
+  // ── Navigate back ──────────────────────────────────────────────────────────
   const goBack = () => {
     const role = localStorage.getItem('role')
     if (role === 'ENCADRANT') navigate('/supervisor')
@@ -195,7 +315,6 @@ export default function SupervisorDeadlinesPage() {
       return new Date(da).getTime() - new Date(db).getTime()
     })
 
-  // Stats
   const total    = deadlines.length
   const actives  = deadlines.filter(d => getStatut(getDate(d)) === 'ACTIVE').length
   const bientot  = deadlines.filter(d => getStatut(getDate(d)) === 'BIENTOT').length
@@ -208,6 +327,96 @@ export default function SupervisorDeadlinesPage() {
     ? 'bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500 focus:border-purple-500'
     : 'bg-white border-purple-200 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10'
   const muted = isDark ? 'text-gray-400' : 'text-gray-500'
+
+  // ── Calendar rendering ──────────────────────────────────────────────────────
+  const renderCalendar = () => {
+    const daysInMonth = getDaysInMonth(calYear, calMonth)
+    const firstDay = getFirstDayOfMonth(calYear, calMonth)
+    const today = new Date()
+    const todayStr = formatDateStr(today)
+    const selectedDate = form.dateLimite
+
+    const prevMonth = () => {
+      if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1) }
+      else setCalMonth(m => m - 1)
+    }
+    const nextMonth = () => {
+      if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1) }
+      else setCalMonth(m => m + 1)
+    }
+
+    const cells: React.ReactNode[] = []
+    for (let i = 0; i < firstDay; i++) {
+      cells.push(<div key={`empty-${i}`} className="h-8" />)
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(calYear, calMonth, d)
+      const dateStr = formatDateStr(dateObj)
+      const isToday = dateStr === todayStr
+      const isSelected = dateStr === selectedDate
+      const isPast = dateObj < new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+      cells.push(
+        <motion.button
+          key={d}
+          whileHover={!isPast ? { scale: 1.15 } : {}}
+          whileTap={!isPast ? { scale: 0.9 } : {}}
+          disabled={isPast}
+          onClick={() => !isPast && setForm(f => ({ ...f, dateLimite: dateStr }))}
+          className={`h-8 w-8 rounded-lg text-xs font-medium flex items-center justify-center transition-all
+            ${isPast ? 'text-gray-300 dark:text-gray-700 cursor-not-allowed' : 'cursor-pointer'}
+            ${isToday && !isSelected ? `ring-1 ${isDark ? 'ring-purple-500' : 'ring-purple-400'}` : ''}
+            ${isSelected
+              ? 'text-white shadow-lg'
+              : isPast ? '' : isDark ? 'text-gray-300 hover:bg-purple-900/30' : 'text-gray-700 hover:bg-purple-50'
+            }`}
+          style={isSelected ? { background: 'linear-gradient(135deg, #421384, #6d28d9)' } : {}}
+        >
+          {d}
+        </motion.button>
+      )
+    }
+
+    return (
+      <div className={`rounded-xl p-3 ${isDark ? 'bg-gray-800/50' : 'bg-purple-50/50'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={prevMonth}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-purple-100 text-gray-500'}`}>
+            <ChevronLeft size={14} />
+          </button>
+          <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+            {MONTHS_FR[calMonth]} {calYear}
+          </span>
+          <button onClick={nextMonth}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-purple-100 text-gray-500'}`}>
+            <ChevronRight size={14} />
+          </button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {DAYS_FR.map(dn => (
+            <div key={dn} className={`h-6 flex items-center justify-center text-xs font-medium ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              {dn}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells}
+        </div>
+        {selectedDate && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
+              isDark ? 'bg-purple-900/30 text-purple-300' : 'bg-purple-100 text-purple-700'
+            }`}
+          >
+            <CalendarDays size={13} />
+            {new Date(selectedDate + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </motion.div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={`min-h-screen ${bg} ${isDark ? 'text-gray-100' : 'text-gray-900'} font-sans`}>
@@ -236,7 +445,7 @@ export default function SupervisorDeadlinesPage() {
 
         <motion.button
           whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-          onClick={openAdd}
+          onClick={checkAndOpenAddModal}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-semibold shadow-lg"
           style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}
         >
@@ -314,7 +523,7 @@ export default function SupervisorDeadlinesPage() {
               {deadlines.length === 0 ? 'Créez votre première deadline pour vos étudiants.' : 'Modifiez votre recherche ou filtre.'}
             </p>
             {deadlines.length === 0 && (
-              <button onClick={openAdd}
+              <button onClick={checkAndOpenAddModal}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold"
                 style={{ background: 'linear-gradient(135deg, #421384, #6d28d9)' }}>
                 <Plus size={15} /> Créer une deadline
@@ -422,6 +631,7 @@ export default function SupervisorDeadlinesPage() {
               className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-white'}`}
               onClick={e => e.stopPropagation()}
             >
+              {/* Header */}
               <div className="px-6 pt-6 pb-4" style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(66,19,132,0.08)'}` }}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -441,24 +651,27 @@ export default function SupervisorDeadlinesPage() {
                 </div>
               </div>
 
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+                {/* Titre */}
                 <div>
-                  <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>Titre *</label>
+                  <label className={`text-xs font-semibold tracking-wider uppercase mb-2 block ${muted}`}>Titre *</label>
                   <input type="text" value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))}
                     placeholder="Ex: Rendu rapport final, Soutenance..."
                     className={`w-full h-10 px-4 border rounded-xl text-sm outline-none transition-all ${input}`}
                   />
                 </div>
 
+                {/* Calendrier interactif */}
                 <div>
-                  <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>Date limite *</label>
-                  <input type="date" value={form.dateLimite} onChange={e => setForm(p => ({ ...p, dateLimite: e.target.value }))}
-                    className={`w-full h-10 px-4 border rounded-xl text-sm outline-none transition-all ${input}`}
-                  />
+                  <label className={`text-xs font-semibold tracking-wider uppercase mb-2 block ${muted}`}>
+                    <span className="flex items-center gap-1.5"><CalendarDays size={12} /> Date limite *</span>
+                  </label>
+                  {renderCalendar()}
                 </div>
 
+                {/* Description */}
                 <div>
-                  <label className={`text-xs font-semibold tracking-wider uppercase mb-1.5 block ${muted}`}>Description (optionnel)</label>
+                  <label className={`text-xs font-semibold tracking-wider uppercase mb-2 block ${muted}`}>Description (optionnel)</label>
                   <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
                     placeholder="Instructions, détails pour les étudiants..."
                     rows={3}
@@ -466,6 +679,7 @@ export default function SupervisorDeadlinesPage() {
                   />
                 </div>
 
+                {/* Boutons */}
                 <div className="flex gap-2 pt-1">
                   <button onClick={() => setShowModal(false)}
                     className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
@@ -516,6 +730,87 @@ export default function SupervisorDeadlinesPage() {
                 <button onClick={handleDelete} disabled={deleting}
                   className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-60 transition-colors">
                   {deleting ? <Loader2 size={14} className="animate-spin" /> : <><Trash2 size={14} /> Supprimer</>}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ══ Deadline Limit Overlay ════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showLimitOverlay && nextDeadlineDate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)' }}
+            onClick={() => setShowLimitOverlay(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 30 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className={`w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-white'}`}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="h-1.5" style={{ background: 'linear-gradient(90deg, #f59e0b, #ef4444, #f59e0b)' }} />
+
+              <div className="p-8 text-center">
+                <motion.div
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+                  className={`w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center ${isDark ? 'bg-amber-900/30' : 'bg-amber-50'}`}
+                >
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={isDark ? '#f59e0b' : '#d97706'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </motion.div>
+
+                <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Limite Hebdomadaire Atteinte
+                </h2>
+                <p className={`text-sm mb-6 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Vous ne pouvez créer qu'une seule deadline par semaine. Votre prochaine création sera disponible dans :
+                </p>
+
+                <div className="flex items-center justify-center gap-3 mb-6">
+                  {[
+                    { value: timeLeftDL.days, label: 'Jours' },
+                    { value: timeLeftDL.hours, label: 'Heures' },
+                    { value: timeLeftDL.minutes, label: 'Min' },
+                    { value: timeLeftDL.seconds, label: 'Sec' },
+                  ].map((unit, i) => (
+                    <div key={i} className="flex flex-col items-center">
+                      <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold ${
+                        isDark ? 'bg-gray-800 text-amber-400' : 'bg-amber-50 text-amber-600'
+                      }`}>
+                        {String(unit.value).padStart(2, '0')}
+                      </div>
+                      <span className={`text-xs mt-1.5 font-medium ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                        {unit.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${
+                  isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-50 text-gray-600'
+                }`}>
+                  <CalendarDays size={14} />
+                  Disponible le {nextDeadlineDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+
+                <button
+                  onClick={() => setShowLimitOverlay(false)}
+                  className={`mt-6 w-full py-3 rounded-xl text-sm font-semibold transition-colors ${
+                    isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  J'ai compris
                 </button>
               </div>
             </motion.div>
