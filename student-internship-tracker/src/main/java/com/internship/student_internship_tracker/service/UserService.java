@@ -7,7 +7,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import com.internship.student_internship_tracker.entity.Role;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 

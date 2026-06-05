@@ -4,12 +4,12 @@ import {
   LayoutDashboard, Users, FileText, Bell,
   Settings, HelpCircle, Moon, Sun, LogOut,
   Plus, X, TrendingUp, Activity,
-  GraduationCap, UserCheck, Shield, Search
+  GraduationCap, UserCheck, Search
 } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart,
-  Pie, Cell, Legend, LineChart, Line, AreaChart, Area
+  Pie, Cell, Legend, AreaChart, Area
 } from 'recharts'
 import { useAuthStore } from '../store/authStore'
 import { useTheme } from '../hooks/useTheme'
@@ -109,12 +109,6 @@ export default function AdminDashboard() {
     { name: 'Encadrants', value: encadrants.length },
     { name: 'Admins', value: admins.length },
   ].filter(d => d.value > 0)
-
-  const rapportStatusData = [
-    { name: 'Soumis', value: soumis },
-    { name: 'Validé', value: valides },
-    { name: 'Rejeté', value: rejetes },
-  ]
 
   const statCards = [
     {

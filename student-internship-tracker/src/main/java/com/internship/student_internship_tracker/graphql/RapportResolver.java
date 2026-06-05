@@ -5,7 +5,6 @@ import com.internship.student_internship_tracker.entity.Rapport;
 import com.internship.student_internship_tracker.entity.Rapport.StatutRapport;
 import com.internship.student_internship_tracker.entity.User;
 import com.internship.student_internship_tracker.repository.CommentaireRepository;
-import com.internship.student_internship_tracker.repository.DeadlineRepository;
 import com.internship.student_internship_tracker.repository.RapportRepository;
 import com.internship.student_internship_tracker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +22,6 @@ public class RapportResolver {
     private final RapportRepository rapportRepository;
     private final UserRepository userRepository;
     private final CommentaireRepository commentaireRepository;
-    private final DeadlineRepository deadlineRepository;
 
     @QueryMapping
     public List<Rapport> rapports() {

@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   FileText, Plus, X, Check, Search,
   Clock, CheckCircle, XCircle, AlertCircle,
-  ChevronDown, Eye, Send, BookOpen, Calendar,
+  Eye, Send, BookOpen, Calendar,
   ArrowLeft, Loader2, Upload,
-  Trash2, Download, Archive, Image, Paperclip, MessageSquare,
+  Trash2, Download, Paperclip, MessageSquare,
   UserCheck, Shield, CalendarDays
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'

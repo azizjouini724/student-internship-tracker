@@ -1,16 +1,39 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, FileText, Bell, User,
-  Settings, HelpCircle, Moon, Sun, LogOut,
-  Plus, TrendingUp, Target, Clock, Award, Search
+  LayoutDashboard,
+  FileText,
+  Bell,
+  User,
+  Settings,
+  HelpCircle,
+  Moon,
+  Sun,
+  LogOut,
+  Plus,
+  TrendingUp,
+  Target,
+  Clock,
+  Award,
+  Search,
+  X,
+  Send,
+  UserCheck,
+  AlertCircle,
+  MessageCircle
 } from 'lucide-react'
-import { X, Send, UserCheck, AlertCircle, MessageCircle } from 'lucide-react'
-import { AnimatePresence } from 'framer-motion'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, PieChart, Pie,
-  Cell, Legend
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend
 } from 'recharts'
 import { useAuthStore } from '../store/authStore'
 import { useTheme } from '../hooks/useTheme'
@@ -21,10 +44,20 @@ import NotificationBell from '../components/NotificationBell'
 
 const COLORS = ['#142588', '#006c48', '#ef4444', '#f59e0b']
 
+interface RetardNotification {
+  id: number
+  titre?: string
+  message: string
+  estLue?: boolean
+  type?: string
+  dateEnvoi?: string
+}
+
 export default function StudentDashboard() {
   const { nom, logout, photoUrl } = useAuthStore()
   const { isDark, toggleTheme } = useTheme()
   const navigate = useNavigate()
+
   const [rapports, setRapports] = useState<any[]>([])
   const [activeNav, setActiveNav] = useState('Dashboard')
   const [showDemandeModal, setShowDemandeModal] = useState(false)
@@ -34,34 +67,31 @@ export default function StudentDashboard() {
   const [demandes, setDemandes] = useState<any[]>([])
   const [loadingDemande, setLoadingDemande] = useState(false)
   const [deadlines, setDeadlines] = useState<any[]>([])
-  const [retardNotifications, setRetardNotifications] = useState<any[]>([]) // [NEW]
+  const [retardNotifications, setRetardNotifications] = useState<RetardNotification[]>([])
+  const [hiddenRetardIds, setHiddenRetardIds] = useState<number[]>([])
 
-  // [TIME] Timer deadline 24h
   const [urgentDeadline, setUrgentDeadline] = useState<any | null>(null)
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 })
   const [isUrgent, setIsUrgent] = useState(false)
 
+  const getHiddenRetardIds = () => {
+    const userId = localStorage.getItem('userId')
+    const key = `hiddenRetardNotifications_${userId}`
+    const saved = localStorage.getItem(key)
+    return saved ? JSON.parse(saved) : []
+  }
+
   useEffect(() => {
+    const hiddenIds = getHiddenRetardIds()
+    setHiddenRetardIds(hiddenIds)
+
     fetchRapports()
     fetchEncadrants()
     fetchDemandes()
     fetchDeadlines()
-    fetchRetardNotifications() // [NEW]
+    fetchRetardNotifications(hiddenIds)
   }, [])
 
-  // [NEW] Fetch retard notifications
-  const fetchRetardNotifications = async () => {
-    try {
-      const userId = localStorage.getItem('userId')
-      if (!userId) return
-      const res = await api.get(`/notifications/user/${userId}/type/RETARD_DEPOT`)
-      setRetardNotifications(res.data)
-    } catch (error) {
-      console.error('[ERROR] Erreur chargement retards:', error)
-    }
-  }
-
-  // [TIME] Countdown deadline 24h — avec vérification par deadlineId
   useEffect(() => {
     const calculateCountdown = () => {
       if (!deadlines || deadlines.length === 0) {
@@ -70,15 +100,12 @@ export default function StudentDashboard() {
         return
       }
 
-      // [+] FIX : Exclure les deadlines pour lesquelles l'étudiant a DÉJÀ soumis un rapport (par ID)
       const submittedDeadlineIds = rapports
-        .filter(r => r.statut === 'SOUMIS' || r.statut === 'VALIDE')
-        .map(r => r.deadlineId)
+        .filter((r) => r.statut === 'SOUMIS' || r.statut === 'VALIDE')
+        .map((r) => r.deadlineId)
         .filter((id: any): id is number => id !== null && id !== undefined)
 
-      const activeDeadlines = deadlines.filter((dl: any) => {
-        return !submittedDeadlineIds.includes(dl.id)
-      })
+      const activeDeadlines = deadlines.filter((dl: any) => !submittedDeadlineIds.includes(dl.id))
 
       if (activeDeadlines.length === 0) {
         setUrgentDeadline(null)
@@ -93,22 +120,25 @@ export default function StudentDashboard() {
       for (const dl of activeDeadlines) {
         const dateStr = dl.dateLimite || dl.dateEcheance
         if (!dateStr) continue
+
         const dlDate = new Date(dateStr).getTime()
         const diff = dlDate - now
+
         if (diff > 0 && diff < nearestDiff) {
           nearestDiff = diff
           nearestDL = dl
         }
       }
 
-      // 24h = 86400000 ms
       if (nearestDL && nearestDiff <= 86400000) {
         setUrgentDeadline(nearestDL)
+
         const h = Math.floor(nearestDiff / (1000 * 60 * 60))
         const m = Math.floor((nearestDiff % (1000 * 60 * 60)) / (1000 * 60))
         const s = Math.floor((nearestDiff % (1000 * 60)) / 1000)
+
         setCountdown({ h, m, s })
-        setIsUrgent(nearestDiff <= 3600000) // 1h = clignote
+        setIsUrgent(nearestDiff <= 3600000)
       } else {
         setUrgentDeadline(null)
         setIsUrgent(false)
@@ -171,16 +201,68 @@ export default function StudentDashboard() {
     }
   }
 
+  const fetchRetardNotifications = async (customHiddenIds?: number[]) => {
+    try {
+      const userId = localStorage.getItem('userId')
+      if (!userId) return
+
+      const res = await api.get(`/notifications/user/${userId}/type/RETARD_DEPOT`)
+      const idsToHide = customHiddenIds ?? hiddenRetardIds
+
+      const visibleAlerts = (res.data || []).filter(
+        (notif: RetardNotification) => !idsToHide.includes(notif.id)
+      )
+
+      setRetardNotifications(visibleAlerts)
+    } catch (error) {
+      console.error('[ERROR] Erreur chargement retards:', error)
+    }
+  }
+
+  const masquerAlerteRetard = (notificationId: number) => {
+    const userId = localStorage.getItem('userId')
+    const key = `hiddenRetardNotifications_${userId}`
+
+    const updatedHiddenIds = [...hiddenRetardIds, notificationId]
+    localStorage.setItem(key, JSON.stringify(updatedHiddenIds))
+    setHiddenRetardIds(updatedHiddenIds)
+
+    setRetardNotifications((prev) =>
+      prev.filter((notif) => notif.id !== notificationId)
+    )
+
+    toast.success('Alerte dashboard masquée')
+  }
+
+  const masquerToutesLesAlertesRetard = () => {
+    if (retardNotifications.length === 0) return
+
+    const userId = localStorage.getItem('userId')
+    const key = `hiddenRetardNotifications_${userId}`
+
+    const currentIds = retardNotifications.map((notif) => notif.id)
+    const updatedHiddenIds = [...hiddenRetardIds, ...currentIds]
+
+    localStorage.setItem(key, JSON.stringify(updatedHiddenIds))
+    setHiddenRetardIds(updatedHiddenIds)
+
+    setRetardNotifications([])
+    toast.success('Toutes les alertes dashboard ont été masquées')
+  }
+
   const soumettreDemande = async () => {
     if (!selectedEncadrant) {
       toast.error('Sélectionnez un encadrant')
       return
     }
+
     if (!messageDemande.trim()) {
       toast.error('Écrivez un message')
       return
     }
+
     setLoadingDemande(true)
+
     try {
       const userId = localStorage.getItem('userId')
       await api.post('/demandes', {
@@ -188,6 +270,7 @@ export default function StudentDashboard() {
         encadrantId: selectedEncadrant.id,
         message: messageDemande
       })
+
       toast.success('Demande envoyée à ' + selectedEncadrant.nom + ' !')
       setShowDemandeModal(false)
       setMessageDemande('')
@@ -200,8 +283,8 @@ export default function StudentDashboard() {
     }
   }
 
-  const encadrantAccepte = demandes.find(d => d.statut === 'ACCEPTE')
-  const demandeEnAttente = demandes.find(d => d.statut === 'EN_ATTENTE')
+  const encadrantAccepte = demandes.find((d) => d.statut === 'ACCEPTE')
+  const demandeEnAttente = demandes.find((d) => d.statut === 'EN_ATTENTE')
 
   const handleNewSubmission = () => {
     if (!encadrantAccepte) {
@@ -212,25 +295,26 @@ export default function StudentDashboard() {
       )
       return
     }
+
     navigate('/reports')
   }
 
   const total = rapports.length
-  const soumis = rapports.filter(r => r.statut === 'SOUMIS').length
-  const valide = rapports.filter(r => r.statut === 'VALIDE').length
-  const rejete = rapports.filter(r => r.statut === 'REJETE').length
+  const soumis = rapports.filter((r) => r.statut === 'SOUMIS').length
+  const valide = rapports.filter((r) => r.statut === 'VALIDE').length
+  const rejete = rapports.filter((r) => r.statut === 'REJETE').length
   const completionScore = total > 0 ? Math.round((valide / total) * 100) : 0
   const onTimeRate = total > 0 ? Math.round(((total - rejete) / total) * 100) : 0
 
   const pieData = [
     { name: 'Soumis', value: soumis },
     { name: 'Validé', value: valide },
-    { name: 'Rejeté', value: rejete },
-  ].filter(d => d.value > 0)
+    { name: 'Rejeté', value: rejete }
+  ].filter((d) => d.value > 0)
 
   const lineData = rapports.slice(-6).map((r, i) => ({
     name: `S${i + 1}`,
-    score: r.statut === 'VALIDE' ? 100 : r.statut === 'SOUMIS' ? 60 : 20,
+    score: r.statut === 'VALIDE' ? 100 : r.statut === 'SOUMIS' ? 60 : 20
   }))
 
   const axisColor = isDark ? '#e5e7eb' : '#9ca3af'
@@ -240,29 +324,45 @@ export default function StudentDashboard() {
 
   const statCards = [
     {
-      icon: Target, label: 'Completion Score',
-      value: `${completionScore}%`, sub: 'Rapports validés',
-      color: 'text-primary', bg: 'bg-blue-50 dark:bg-blue-900/20',
-      iconColor: 'text-primary', border: 'border-l-primary'
+      icon: Target,
+      label: 'Completion Score',
+      value: `${completionScore}%`,
+      sub: 'Rapports validés',
+      color: 'text-primary',
+      bg: 'bg-blue-50 dark:bg-blue-900/20',
+      iconColor: 'text-primary',
+      border: 'border-l-primary'
     },
     {
-      icon: TrendingUp, label: 'Progress Rate',
-      value: `${total > 0 ? Math.round((total / 10) * 100) : 0}%`, sub: `${total} / 10 rapports`,
-      color: 'text-secondary', bg: 'bg-green-50 dark:bg-green-900/20',
-      iconColor: 'text-secondary', border: 'border-l-secondary'
+      icon: TrendingUp,
+      label: 'Progress Rate',
+      value: `${total > 0 ? Math.round((total / 10) * 100) : 0}%`,
+      sub: `${total} / 10 rapports`,
+      color: 'text-secondary',
+      bg: 'bg-green-50 dark:bg-green-900/20',
+      iconColor: 'text-secondary',
+      border: 'border-l-secondary'
     },
     {
-      icon: Clock, label: 'On Time Rate',
-      value: `${onTimeRate}%`, sub: 'Soumis dans les délais',
-      color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20',
-      iconColor: 'text-purple-600', border: 'border-l-purple-500'
+      icon: Clock,
+      label: 'On Time Rate',
+      value: `${onTimeRate}%`,
+      sub: 'Soumis dans les délais',
+      color: 'text-purple-600',
+      bg: 'bg-purple-50 dark:bg-purple-900/20',
+      iconColor: 'text-purple-600',
+      border: 'border-l-purple-500'
     },
     {
-      icon: Award, label: 'Total Submissions',
-      value: String(total).padStart(2, '0'), sub: 'Rapports soumis',
-      color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20',
-      iconColor: 'text-amber-600', border: 'border-l-amber-500'
-    },
+      icon: Award,
+      label: 'Total Submissions',
+      value: String(total).padStart(2, '0'),
+      sub: 'Rapports soumis',
+      color: 'text-amber-600',
+      bg: 'bg-amber-50 dark:bg-amber-900/20',
+      iconColor: 'text-amber-600',
+      border: 'border-l-amber-500'
+    }
   ]
 
   const navItems = [
@@ -270,7 +370,7 @@ export default function StudentDashboard() {
     { icon: FileText, label: 'Reports', path: '/reports' },
     { icon: MessageCircle, label: 'Messages', path: '/messages' },
     { icon: Bell, label: 'Notifications', path: '/notifications' },
-    { icon: User, label: 'Profile', path: '/profile' },
+    { icon: User, label: 'Profile', path: '/profile' }
   ]
 
   const handleNavClick = (label: string, path: string | null) => {
@@ -279,8 +379,12 @@ export default function StudentDashboard() {
   }
 
   const getStatutColor = (statut: string) => {
-    if (statut === 'VALIDE') return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-    if (statut === 'REJETE') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+    if (statut === 'VALIDE') {
+      return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+    }
+    if (statut === 'REJETE') {
+      return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+    }
     return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
   }
 
@@ -288,22 +392,25 @@ export default function StudentDashboard() {
     <div className="flex min-h-screen bg-surface dark:bg-gray-950 font-sans">
       <Toaster position="top-right" richColors />
 
-      {/* SIDEBAR */}
       <motion.aside
-        initial={{ x: -80, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+        initial={{ x: -80, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.5 }}
         className="w-64 bg-white dark:bg-gray-900 flex flex-col py-8 px-5"
         style={{ borderRight: '1px solid rgba(20,37,136,0.06)' }}
       >
         <div className="mb-10 px-2">
           <h1 className="text-primary font-bold text-lg tracking-wide">Dossier Pro</h1>
-          <p className="text-gray-400 text-xs tracking-widest uppercase mt-0.5">Internship Portal</p>
+          <p className="text-gray-400 text-xs tracking-widest uppercase mt-0.5">
+            Internship Portal
+          </p>
         </div>
 
         <nav className="flex flex-col gap-1 flex-1">
           {navItems.map(({ icon: Icon, label, path }) => (
             <motion.button
-              key={label} whileHover={{ x: 3 }}
+              key={label}
+              whileHover={{ x: 3 }}
               onClick={() => handleNavClick(label, path)}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 activeNav === label
@@ -311,53 +418,75 @@ export default function StudentDashboard() {
                   : 'text-gray-500 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-800 hover:text-primary dark:hover:text-white'
               }`}
             >
-              <Icon className="w-4 h-4" />{label}
+              <Icon className="w-4 h-4" />
+              {label}
             </motion.button>
           ))}
         </nav>
 
-        <div className="flex flex-col gap-1 pt-4" style={{ borderTop: '1px solid rgba(20,37,136,0.06)' }}>
-          <motion.button whileHover={{ x: 3 }} onClick={() => navigate('/settings')}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all">
-            <Settings className="w-4 h-4" />Settings
+        <div
+          className="flex flex-col gap-1 pt-4"
+          style={{ borderTop: '1px solid rgba(20,37,136,0.06)' }}
+        >
+          <motion.button
+            whileHover={{ x: 3 }}
+            onClick={() => navigate('/settings')}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all"
+          >
+            <Settings className="w-4 h-4" />
+            Settings
           </motion.button>
-          <motion.button whileHover={{ x: 3 }} onClick={() => navigate('/support')}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all">
-            <HelpCircle className="w-4 h-4" />Support
+
+          <motion.button
+            whileHover={{ x: 3 }}
+            onClick={() => navigate('/support')}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-gray-400 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-white transition-all"
+          >
+            <HelpCircle className="w-4 h-4" />
+            Support
           </motion.button>
-          <motion.button whileHover={{ x: 3 }} onClick={() => { logout(); navigate('/login') }}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
-            <LogOut className="w-4 h-4" />Logout
+
+          <motion.button
+            whileHover={{ x: 3 }}
+            onClick={() => {
+              logout()
+              navigate('/login')
+            }}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+          >
+            <LogOut className="w-4 h-4" />
+            Logout
           </motion.button>
         </div>
       </motion.aside>
 
-      {/* MAIN */}
       <main className="flex-1 flex flex-col overflow-hidden">
-
-        {/* TOPBAR */}
         <motion.header
-          initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
           className="flex items-center justify-between px-8 py-4 bg-white dark:bg-gray-900"
           style={{ borderBottom: '1px solid rgba(20,37,136,0.06)' }}
         >
           <div className="flex items-center gap-3 bg-blue-50 dark:bg-gray-800 rounded-xl px-4 py-2.5 w-72">
             <Search size={16} className="text-gray-400" />
-            <input placeholder="Search dossier..."
-              className="bg-transparent text-sm text-gray-600 dark:text-gray-100 outline-none w-full placeholder-gray-400 dark:placeholder-gray-500" />
+            <input
+              placeholder="Search dossier..."
+              className="bg-transparent text-sm text-gray-600 dark:text-gray-100 outline-none w-full placeholder-gray-400 dark:placeholder-gray-500"
+            />
           </div>
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-
               {!encadrantAccepte && (
                 <motion.button
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => setShowDemandeModal(true)}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium shadow-lg shadow-primary/20"
                   style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
                 >
-                  <UserCheck className="w-4 h-4" />DEMANDER ENCADRANT
+                  <UserCheck className="w-4 h-4" />
+                  DEMANDER ENCADRANT
                 </motion.button>
               )}
 
@@ -371,7 +500,8 @@ export default function StudentDashboard() {
               )}
 
               <motion.button
-                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={handleNewSubmission}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium transition-all ${
                   !encadrantAccepte ? 'opacity-50 cursor-not-allowed' : ''
@@ -379,39 +509,55 @@ export default function StudentDashboard() {
                 style={{ background: 'linear-gradient(135deg, #006c48, #059669)' }}
                 title={!encadrantAccepte ? 'Vous devez avoir un encadrant accepté' : ''}
               >
-                <Plus className="w-4 h-4" />NEW SUBMISSION
+                <Plus className="w-4 h-4" />
+                NEW SUBMISSION
               </motion.button>
             </div>
 
-            {/* [TIME] Timer Deadline 24h — DISPARAÎT si rapport soumis pour cette deadline */}
             {urgentDeadline && (
               <motion.div
                 animate={isUrgent ? { scale: [1, 1.08, 1], opacity: [1, 0.7, 1] } : {}}
                 transition={{ repeat: Infinity, duration: 0.8, ease: 'easeInOut' }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold shadow-lg cursor-pointer"
-                style={{ background: isUrgent ? 'linear-gradient(135deg, #dc2626, #991b1b)' : 'linear-gradient(135deg, #ef4444, #dc2626)' }}
+                style={{
+                  background: isUrgent
+                    ? 'linear-gradient(135deg, #dc2626, #991b1b)'
+                    : 'linear-gradient(135deg, #ef4444, #dc2626)'
+                }}
                 onClick={() => navigate('/reports')}
                 title={`Deadline : ${urgentDeadline.type || urgentDeadline.titre}`}
               >
                 <Clock size={16} className="text-white" />
                 <span>
-                  {String(countdown.h).padStart(2, '0')}:{String(countdown.m).padStart(2, '0')}:{String(countdown.s).padStart(2, '0')}
+                  {String(countdown.h).padStart(2, '0')}:
+                  {String(countdown.m).padStart(2, '0')}:
+                  {String(countdown.s).padStart(2, '0')}
                 </span>
               </motion.div>
             )}
 
-            <motion.button whileTap={{ scale: 0.9 }} onClick={toggleTheme}
-              className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={toggleTheme}
+              className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+            >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </motion.button>
+
             <NotificationBell isDark={isDark} />
+
             <motion.div
-              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/profile')}
               className="w-9 h-9 rounded-xl cursor-pointer"
             >
               {photoUrl ? (
-                <img src={photoUrl} alt="avatar" className="w-9 h-9 rounded-xl object-cover" />
+                <img
+                  src={photoUrl}
+                  alt="avatar"
+                  className="w-9 h-9 rounded-xl object-cover"
+                />
               ) : (
                 <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white text-sm font-bold">
                   {nom?.charAt(0).toUpperCase() || 'U'}
@@ -421,12 +567,16 @@ export default function StudentDashboard() {
           </div>
         </motion.header>
 
-        {/* CONTENT */}
         <div className="flex-1 p-8 overflow-auto">
-
-          {/* Welcome */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white" style={{ letterSpacing: '-0.02em' }}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8"
+          >
+            <h2
+              className="text-3xl font-bold text-gray-900 dark:text-white"
+              style={{ letterSpacing: '-0.02em' }}
+            >
               Hello, {nom?.split(' ')[0] || 'Student'}.
             </h2>
             <p className="text-gray-400 dark:text-gray-300 mt-1 text-sm">
@@ -434,26 +584,54 @@ export default function StudentDashboard() {
             </p>
           </motion.div>
 
-          {/* [NEW] Retards de Dépôt Section */}
           {retardNotifications.length > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
               className="mb-6 flex items-start gap-4 px-5 py-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border-l-4 border-orange-500"
             >
               <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+
               <div className="flex-1">
-                <h4 className="font-semibold text-orange-700 dark:text-orange-400 mb-2">
-                  [ALERT] Dépôts en Retard
-                </h4>
-                <ul className="space-y-1">
-                  {retardNotifications.map((notif, idx) => (
-                    <li key={idx} className="text-sm text-orange-600 dark:text-orange-300">
-                      • {notif.message}
-                    </li>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h4 className="font-semibold text-orange-700 dark:text-orange-400">
+                    Dépôts en retard
+                  </h4>
+
+                  {retardNotifications.length > 1 && (
+                    <button
+                      onClick={masquerToutesLesAlertesRetard}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-800/40 dark:text-orange-300 dark:hover:bg-orange-800/60 transition-all"
+                    >
+                      Tout masquer
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {retardNotifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      className="flex items-start justify-between gap-3 px-3 py-2 rounded-lg bg-white/70 dark:bg-gray-900/30"
+                    >
+                      <p className="text-sm text-orange-600 dark:text-orange-300">
+                        {notif.message}
+                      </p>
+
+                      <button
+                        onClick={() => masquerAlerteRetard(notif.id)}
+                        className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-orange-600 hover:bg-orange-100 dark:text-orange-300 dark:hover:bg-orange-800/40 transition-all"
+                        title="Masquer cette alerte"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   ))}
-                </ul>
+                </div>
+
                 <motion.button
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => navigate('/reports')}
                   className="mt-3 px-4 py-2 bg-orange-500 text-white text-xs font-semibold rounded-lg hover:bg-orange-600 transition-all"
                 >
@@ -463,50 +641,57 @@ export default function StudentDashboard() {
             </motion.div>
           )}
 
-          {/* [TIME] Bannière deadline urgente — DISPARAÎT si rapport soumis */}
           {urgentDeadline && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
               className="mb-6 flex items-center justify-between px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
             >
               <div className="flex items-center gap-3">
                 <Clock className="w-5 h-5 text-red-500 flex-shrink-0" />
                 <p className="text-sm text-red-700 dark:text-red-400">
-                  <span className="font-bold">Deadline imminente :</span> {urgentDeadline.type || urgentDeadline.titre} — dans {String(countdown.h).padStart(2, '0')}h{String(countdown.m).padStart(2, '0')}m{String(countdown.s).padStart(2, '0')}s
+                  <span className="font-bold">Deadline imminente :</span>{' '}
+                  {urgentDeadline.type || urgentDeadline.titre} — dans{' '}
+                  {String(countdown.h).padStart(2, '0')}h
+                  {String(countdown.m).padStart(2, '0')}m
+                  {String(countdown.s).padStart(2, '0')}s
                 </p>
               </div>
+
               <motion.button
-                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => navigate('/reports')}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-white text-xs font-semibold"
                 style={{ background: 'linear-gradient(135deg, #006c48, #059669)' }}
               >
-                <Plus size={12} /> Soumettre
+                <Plus size={12} />
+                Soumettre
               </motion.button>
             </motion.div>
           )}
 
           {!encadrantAccepte && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
               className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
             >
               <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
               <p className="text-sm text-amber-700 dark:text-amber-400">
                 {demandeEnAttente
                   ? `Demande en attente auprès de ${demandeEnAttente.encadrant?.nom}. Vous pourrez soumettre un rapport dès son acceptation.`
-                  : 'Vous n\'avez pas encore d\'encadrant. Faites une demande pour pouvoir soumettre des rapports.'
-                }
+                  : "Vous n'avez pas encore d'encadrant. Faites une demande pour pouvoir soumettre des rapports."}
               </p>
             </motion.div>
           )}
 
-          {/* STAT CARDS */}
           <div className="grid grid-cols-4 gap-4 mb-8">
             {statCards.map(({ icon: Icon, label, value, sub, color, bg, iconColor, border }, i) => (
               <motion.div
                 key={label}
-                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }}
                 whileHover={{ y: -2, transition: { duration: 0.2 } }}
                 className={`bg-white dark:bg-gray-900 rounded-2xl p-5 border-l-4 ${border} shadow-sm`}
@@ -514,31 +699,67 @@ export default function StudentDashboard() {
                 <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center mb-3`}>
                   <Icon className={`w-4 h-4 ${iconColor}`} />
                 </div>
-                <p className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-1">{label}</p>
-                <p className={`text-3xl font-bold ${color} mb-1`} style={{ letterSpacing: '-0.02em' }}>{value}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-1">
+                  {label}
+                </p>
+                <p
+                  className={`text-3xl font-bold ${color} mb-1`}
+                  style={{ letterSpacing: '-0.02em' }}
+                >
+                  {value}
+                </p>
                 <p className="text-xs text-gray-400 dark:text-gray-300">{sub}</p>
               </motion.div>
             ))}
           </div>
 
-          {/* CHARTS ROW */}
           <div className="grid grid-cols-3 gap-4 mb-8">
             <motion.div
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
               className="col-span-2 bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm"
             >
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Performance Timeline</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-300 mb-6">Your report scores over time</p>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                Performance Timeline
+              </h3>
+              <p className="text-xs text-gray-400 dark:text-gray-300 mb-6">
+                Your report scores over time
+              </p>
+
               {lineData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={200}>
                   <LineChart data={lineData}>
                     <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: axisColor }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 12, fill: axisColor }} axisLine={false} tickLine={false} domain={[0, 100]} />
-                    <Tooltip contentStyle={{ background: tooltipBg, border: 'none', borderRadius: '12px', fontSize: '12px', color: isDark ? '#fff' : '#111' }} />
-                    <Line type="monotone" dataKey="score" stroke="#142588" strokeWidth={2.5}
-                      dot={{ fill: '#142588', r: 4 }} activeDot={{ r: 6 }} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 12, fill: axisColor }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 12, fill: axisColor }}
+                      axisLine={false}
+                      tickLine={false}
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: tooltipBg,
+                        border: 'none',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        color: isDark ? '#fff' : '#111'
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#142588"
+                      strokeWidth={2.5}
+                      dot={{ fill: '#142588', r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -552,22 +773,52 @@ export default function StudentDashboard() {
             </motion.div>
 
             <motion.div
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
               className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm"
             >
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Status Breakdown</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-300 mb-4">Distribution of reports</p>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                Status Breakdown
+              </h3>
+              <p className="text-xs text-gray-400 dark:text-gray-300 mb-4">
+                Distribution of reports
+              </p>
+
               {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={180}>
                   <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={75}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
                       {pieData.map((_, index) => (
                         <Cell key={index} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ background: tooltipBg, border: 'none', borderRadius: '12px', fontSize: '12px', color: isDark ? '#fff' : '#111' }} />
-                    <Legend iconType="circle" iconSize={8} formatter={(value) => <span style={{ fontSize: '11px', color: legendColor }}>{value}</span>} />
+                    <Tooltip
+                      contentStyle={{
+                        background: tooltipBg,
+                        border: 'none',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        color: isDark ? '#fff' : '#111'
+                      }}
+                    />
+                    <Legend
+                      iconType="circle"
+                      iconSize={8}
+                      formatter={(value) => (
+                        <span style={{ fontSize: '11px', color: legendColor }}>
+                          {value}
+                        </span>
+                      )}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
@@ -581,19 +832,23 @@ export default function StudentDashboard() {
             </motion.div>
           </div>
 
-          {/* DEMANDES STATUS */}
           {demandes.length > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.45 }}
               className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm mb-8"
             >
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Mes Demandes d'Encadrement</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
+                Mes Demandes d'Encadrement
+              </h3>
+
               <div className="flex flex-col gap-3">
                 {demandes.map((demande, i) => (
                   <motion.div
                     key={demande.id}
-                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.08 }}
                     className="flex items-center justify-between p-4 rounded-xl bg-blue-50/50 dark:bg-gray-800"
                     style={{ borderLeft: '3px solid #142588' }}
@@ -602,21 +857,31 @@ export default function StudentDashboard() {
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                         <UserCheck className="w-4 h-4 text-primary" />
                       </div>
+
                       <div>
-                        <p className="text-sm font-medium text-gray-800 dark:text-white">{demande.encadrant?.nom}</p>
+                        <p className="text-sm font-medium text-gray-800 dark:text-white">
+                          {demande.encadrant?.nom}
+                        </p>
                         <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
                           {new Date(demande.dateDemande).toLocaleDateString('fr-FR')}
                         </p>
                       </div>
                     </div>
-                    <span className={`text-xs font-medium px-3 py-1 rounded-full ${
-                      demande.statut === 'ACCEPTE'
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+
+                    <span
+                      className={`text-xs font-medium px-3 py-1 rounded-full ${
+                        demande.statut === 'ACCEPTE'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          : demande.statut === 'REFUSE'
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                      }`}
+                    >
+                      {demande.statut === 'ACCEPTE'
+                        ? 'Acceptée'
                         : demande.statut === 'REFUSE'
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                    }`}>
-                      {demande.statut === 'ACCEPTE' ? 'Acceptée' : demande.statut === 'REFUSE' ? 'Refusée' : 'En attente'}
+                        ? 'Refusée'
+                        : 'En attente'}
                     </span>
                   </motion.div>
                 ))}
@@ -624,35 +889,49 @@ export default function StudentDashboard() {
             </motion.div>
           )}
 
-          {/* RECENT REPORTS */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
             className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm"
           >
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white">Recent Submissions</h3>
-                <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Your latest internship reports</p>
+                <h3 className="font-semibold text-gray-900 dark:text-white">
+                  Recent Submissions
+                </h3>
+                <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
+                  Your latest internship reports
+                </p>
               </div>
-              <button onClick={() => navigate('/reports')} className="text-sm text-primary font-medium hover:opacity-70 transition-opacity">
+
+              <button
+                onClick={() => navigate('/reports')}
+                className="text-sm text-primary font-medium hover:opacity-70 transition-opacity"
+              >
                 View All
               </button>
             </div>
+
             <div className="flex flex-col gap-3">
               {rapports.length === 0 ? (
                 <div className="text-center py-12">
                   <FileText className="w-10 h-10 mx-auto mb-3 opacity-20 text-gray-400 dark:text-gray-500" />
-                  <p className="text-sm font-medium text-gray-400 dark:text-gray-300">No reports submitted yet</p>
+                  <p className="text-sm font-medium text-gray-400 dark:text-gray-300">
+                    No reports submitted yet
+                  </p>
                   <p className="text-xs mt-1 text-gray-400 dark:text-gray-500">
-                    {encadrantAccepte ? 'Click NEW SUBMISSION to get started' : 'Request a supervisor first'}
+                    {encadrantAccepte
+                      ? 'Click NEW SUBMISSION to get started'
+                      : 'Request a supervisor first'}
                   </p>
                 </div>
               ) : (
                 rapports.slice(0, 5).map((rapport, i) => (
                   <motion.div
                     key={rapport.id}
-                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.08 }}
                     whileHover={{ x: 2 }}
                     className="flex items-center justify-between p-4 rounded-xl bg-blue-50/50 dark:bg-gray-800 cursor-pointer transition-all"
@@ -662,15 +941,23 @@ export default function StudentDashboard() {
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                         <FileText className="w-4 h-4 text-primary" />
                       </div>
+
                       <div>
-                        <p className="text-sm font-medium text-gray-800 dark:text-white">{rapport.titre}</p>
+                        <p className="text-sm font-medium text-gray-800 dark:text-white">
+                          {rapport.titre}
+                        </p>
                         <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
                           {rapport.dateDepot
-                            ? new Date(rapport.dateDepot).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+                            ? new Date(rapport.dateDepot).toLocaleDateString('fr-FR', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                              })
                             : '—'}
                         </p>
                       </div>
                     </div>
+
                     <span className={`text-xs font-medium px-3 py-1 rounded-full ${getStatutColor(rapport.statut)}`}>
                       {rapport.statut}
                     </span>
@@ -682,11 +969,12 @@ export default function StudentDashboard() {
         </div>
       </main>
 
-      {/* MODAL DEMANDE ENCADRANT */}
       <AnimatePresence>
         {showDemandeModal && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}
             onClick={() => setShowDemandeModal(false)}
@@ -697,28 +985,41 @@ export default function StudentDashboard() {
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ type: 'spring', damping: 25 }}
               className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl"
-              onClick={e => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white text-lg">Demander un Encadrant</h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">Choisissez votre encadrant de stage</p>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-lg">
+                    Demander un Encadrant
+                  </h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-300 mt-0.5">
+                    Choisissez votre encadrant de stage
+                  </p>
                 </div>
-                <button onClick={() => setShowDemandeModal(false)}
-                  className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
+
+                <button
+                  onClick={() => setShowDemandeModal(false)}
+                  className="w-8 h-8 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               <div className="mb-4">
-                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">Choisir un encadrant</label>
+                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
+                  Choisir un encadrant
+                </label>
+
                 <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
                   {encadrants.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-4">Aucun encadrant disponible</p>
+                    <p className="text-sm text-gray-400 text-center py-4">
+                      Aucun encadrant disponible
+                    </p>
                   ) : (
-                    encadrants.map(enc => (
+                    encadrants.map((enc) => (
                       <motion.button
-                        key={enc.id} whileTap={{ scale: 0.98 }}
+                        key={enc.id}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => setSelectedEncadrant(enc)}
                         className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all ${
                           selectedEncadrant?.id === enc.id
@@ -726,16 +1027,32 @@ export default function StudentDashboard() {
                             : 'bg-blue-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-blue-100 dark:hover:bg-gray-700'
                         }`}
                       >
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
-                          selectedEncadrant?.id === enc.id ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary'
-                        }`}>
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
+                            selectedEncadrant?.id === enc.id
+                              ? 'bg-white/20 text-white'
+                              : 'bg-primary/10 text-primary'
+                          }`}
+                        >
                           {enc.nom?.charAt(0)}
                         </div>
+
                         <div>
                           <p className="text-sm font-medium">{enc.nom}</p>
-                          <p className={`text-xs ${selectedEncadrant?.id === enc.id ? 'text-white/70' : 'text-gray-400'}`}>{enc.email}</p>
+                          <p
+                            className={`text-xs ${
+                              selectedEncadrant?.id === enc.id
+                                ? 'text-white/70'
+                                : 'text-gray-400'
+                            }`}
+                          >
+                            {enc.email}
+                          </p>
                         </div>
-                        {selectedEncadrant?.id === enc.id && <UserCheck className="w-4 h-4 ml-auto" />}
+
+                        {selectedEncadrant?.id === enc.id && (
+                          <UserCheck className="w-4 h-4 ml-auto" />
+                        )}
                       </motion.button>
                     ))
                   )}
@@ -743,10 +1060,13 @@ export default function StudentDashboard() {
               </div>
 
               <div className="mb-6">
-                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">Message</label>
+                <label className="text-xs text-gray-400 dark:text-gray-300 tracking-widest uppercase mb-2 block">
+                  Message
+                </label>
+
                 <textarea
                   value={messageDemande}
-                  onChange={e => setMessageDemande(e.target.value)}
+                  onChange={(e) => setMessageDemande(e.target.value)}
                   placeholder="Bonjour, je souhaite être encadré par vous..."
                   rows={3}
                   className="w-full bg-blue-50 dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-xl border-b-2 border-transparent focus:border-primary outline-none text-sm transition-all resize-none"
@@ -754,17 +1074,24 @@ export default function StudentDashboard() {
               </div>
 
               <motion.button
-                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={soumettreDemande}
                 disabled={loadingDemande}
                 className="w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
                 style={{ background: 'linear-gradient(135deg, #142588, #303f9f)' }}
               >
                 {loadingDemande ? (
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                  />
                 ) : (
-                  <><Send className="w-4 h-4" />ENVOYER LA DEMANDE</>
+                  <>
+                    <Send className="w-4 h-4" />
+                    ENVOYER LA DEMANDE
+                  </>
                 )}
               </motion.button>
             </motion.div>

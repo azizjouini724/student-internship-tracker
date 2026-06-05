@@ -4,7 +4,6 @@ import com.internship.student_internship_tracker.entity.User;
 import com.internship.student_internship_tracker.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -16,7 +15,6 @@ import java.util.stream.Collectors;
 public class UserController {
 
     private final UserService userService;
-    private final PasswordEncoder passwordEncoder;
 
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {

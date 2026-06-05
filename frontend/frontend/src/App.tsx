@@ -17,6 +17,7 @@ import SupportPage from './pages/Supportpage'
 import AdminSupportPage from './pages/AdminSupportPage'
 import NotificationsPage from './pages/NotificationsPage'
 import MessagesPage from './pages/MessagesPage'
+import PWAProvider from './components/PWAProvider'
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   const { token } = useAuthStore()

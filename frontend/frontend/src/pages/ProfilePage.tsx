@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom"; // <-- AJOUTÉ
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Mail, Phone, Building2, Calendar, Bell, Camera,
   ChevronLeft, ChevronRight, Plus, X, Check, Clock,
   BookOpen, Briefcase, MapPin, Save, AlertCircle,
   Upload, Link as LinkIcon, Flag, Trash2, FileText,
-  Pencil, User, Globe,
+  Pencil, User, Globe, ArrowLeft, // <-- AJOUTÉ
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -24,7 +25,6 @@ interface UserProfile {
   encadrant?: { nom: string; email: string };
 }
 
-// ✅ FIX : le backend utilise "date" pas "dateEcheance"
 interface CalendarEvent {
   id: number;
   titre: string;
@@ -51,6 +51,16 @@ export default function ProfilePage() {
   const userId = Number(localStorage.getItem("userId"));
   const token = localStorage.getItem("token");
   const isDark = localStorage.getItem("theme") === "dark";
+
+  // ✅ AJOUTÉ : Navigation retour selon le rôle
+  const navigate = useNavigate();
+  const userRole = localStorage.getItem("role");
+  
+  const goBackToDashboard = () => {
+    if (userRole === "ENCADRANT") navigate("/supervisor");
+    else if (userRole === "ADMIN") navigate("/admin");
+    else navigate("/student");
+  };
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [editPhoto, setEditPhoto] = useState(false);
@@ -233,7 +243,6 @@ export default function ProfilePage() {
   // ── Toggle important ───────────────────────────────────────────────────────
   const toggleImportant = async (id: number) => {
     try {
-      // ✅ FIX : envoyer userId dans le body
       await api.put(`/events/${id}/important`, { userId });
       setEvents(prev => prev.map(e => e.id === id ? { ...e, important: !e.important } : e));
     } catch {
@@ -257,7 +266,6 @@ export default function ProfilePage() {
     if (!newDL.titre || !newDL.date) return;
     setAddingDL(true);
     try {
-      // ✅ FIX : envoyer "date" (le backend attend "date" ou "dateEcheance")
       const res = await api.post<CalendarEvent>("/events", {
         titre: newDL.titre,
         date: newDL.date,
@@ -350,11 +358,21 @@ export default function ProfilePage() {
     <div className={`min-h-screen p-6 ${isDark ? "bg-gray-950 text-gray-100" : "bg-gray-50 text-gray-900"}`}>
       <div className="max-w-6xl mx-auto space-y-6">
 
-        {/* Header */}
+        {/* Header avec bouton retour */}
         <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Mon Profil</h1>
-            <p className={`text-sm mt-0.5 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Gérez vos informations personnelles et votre agenda</p>
+          <div className="flex items-center gap-3">
+            <motion.button 
+              whileHover={{ scale: 1.1 }} 
+              whileTap={{ scale: 0.9 }}
+              onClick={goBackToDashboard}
+              className={`p-2 rounded-xl transition-colors ${isDark ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-600"}`}
+            >
+              <ArrowLeft size={22} />
+            </motion.button>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Mon Profil</h1>
+              <p className={`text-sm mt-0.5 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Gérez vos informations personnelles et votre agenda</p>
+            </div>
           </div>
           <span className={`text-sm px-3 py-1 rounded-full font-medium ${roleInfo.color}`}>{roleInfo.label}</span>
         </motion.div>

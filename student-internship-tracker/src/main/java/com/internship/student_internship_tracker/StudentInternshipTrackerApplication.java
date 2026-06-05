@@ -1,6 +1,5 @@
 package com.internship.student_internship_tracker;
 
-import com.internship.student_internship_tracker.entity.User;
 import com.internship.student_internship_tracker.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
