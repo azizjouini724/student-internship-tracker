@@ -34,8 +34,9 @@ export default function StudentDashboard() {
   const [demandes, setDemandes] = useState<any[]>([])
   const [loadingDemande, setLoadingDemande] = useState(false)
   const [deadlines, setDeadlines] = useState<any[]>([])
+  const [retardNotifications, setRetardNotifications] = useState<any[]>([]) // [NEW]
 
-  // ⭐ Timer deadline 24h
+  // [TIME] Timer deadline 24h
   const [urgentDeadline, setUrgentDeadline] = useState<any | null>(null)
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 })
   const [isUrgent, setIsUrgent] = useState(false)
@@ -45,9 +46,22 @@ export default function StudentDashboard() {
     fetchEncadrants()
     fetchDemandes()
     fetchDeadlines()
+    fetchRetardNotifications() // [NEW]
   }, [])
 
-  // ⭐ Countdown deadline 24h — avec vérification par deadlineId
+  // [NEW] Fetch retard notifications
+  const fetchRetardNotifications = async () => {
+    try {
+      const userId = localStorage.getItem('userId')
+      if (!userId) return
+      const res = await api.get(`/notifications/user/${userId}/type/RETARD_DEPOT`)
+      setRetardNotifications(res.data)
+    } catch (error) {
+      console.error('[ERROR] Erreur chargement retards:', error)
+    }
+  }
+
+  // [TIME] Countdown deadline 24h — avec vérification par deadlineId
   useEffect(() => {
     const calculateCountdown = () => {
       if (!deadlines || deadlines.length === 0) {
@@ -56,7 +70,7 @@ export default function StudentDashboard() {
         return
       }
 
-      // ⭐ FIX : Exclure les deadlines pour lesquelles l'étudiant a DÉJÀ soumis un rapport (par ID)
+      // [+] FIX : Exclure les deadlines pour lesquelles l'étudiant a DÉJÀ soumis un rapport (par ID)
       const submittedDeadlineIds = rapports
         .filter(r => r.statut === 'SOUMIS' || r.statut === 'VALIDE')
         .map(r => r.deadlineId)
@@ -133,7 +147,7 @@ export default function StudentDashboard() {
       const res = await api.get(`/demandes/etudiant/${userId}`)
       setDemandes(res.data)
     } catch {
-      console.error('Erreur demandes')
+      console.error('[ERROR] Erreur demandes')
     }
   }
 
@@ -152,7 +166,7 @@ export default function StudentDashboard() {
         setDeadlines([])
       }
     } catch {
-      console.error('Erreur chargement deadlines')
+      console.error('[ERROR] Erreur chargement deadlines')
       setDeadlines([])
     }
   }
@@ -369,7 +383,7 @@ export default function StudentDashboard() {
               </motion.button>
             </div>
 
-            {/* ⭐ Timer Deadline 24h — DISPARAÎT si rapport soumis pour cette deadline */}
+            {/* [TIME] Timer Deadline 24h — DISPARAÎT si rapport soumis pour cette deadline */}
             {urgentDeadline && (
               <motion.div
                 animate={isUrgent ? { scale: [1, 1.08, 1], opacity: [1, 0.7, 1] } : {}}
@@ -420,7 +434,36 @@ export default function StudentDashboard() {
             </p>
           </motion.div>
 
-          {/* ⭐ Bannière deadline urgente — DISPARAÎT si rapport soumis */}
+          {/* [NEW] Retards de Dépôt Section */}
+          {retardNotifications.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+              className="mb-6 flex items-start gap-4 px-5 py-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border-l-4 border-orange-500"
+            >
+              <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-semibold text-orange-700 dark:text-orange-400 mb-2">
+                  [ALERT] Dépôts en Retard
+                </h4>
+                <ul className="space-y-1">
+                  {retardNotifications.map((notif, idx) => (
+                    <li key={idx} className="text-sm text-orange-600 dark:text-orange-300">
+                      • {notif.message}
+                    </li>
+                  ))}
+                </ul>
+                <motion.button
+                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate('/reports')}
+                  className="mt-3 px-4 py-2 bg-orange-500 text-white text-xs font-semibold rounded-lg hover:bg-orange-600 transition-all"
+                >
+                  Soumettre maintenant
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* [TIME] Bannière deadline urgente — DISPARAÎT si rapport soumis */}
           {urgentDeadline && (
             <motion.div
               initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}

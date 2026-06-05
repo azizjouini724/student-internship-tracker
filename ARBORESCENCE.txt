@@ -1,0 +1,225 @@
+================================================================================
+              ARBORESCENCE - PROJET STUDENT INTERNSHIP TRACKER
+================================================================================
+
+projet/
+│
+├── .git/                          # Historique Git
+├── .gitignore
+│
+├── frontend/                      # FRONTEND - React + TypeScript + Vite
+│   ├── package.json
+│   ├── package-lock.json
+│   │
+│   └── frontend/                  # Dossier source principal
+│       ├── package.json
+│       ├── package-lock.json
+│       ├── index.html
+│       ├── vite.config.ts         # Configuration Vite
+│       ├── tailwind.config.js     # Configuration Tailwind CSS
+│       ├── postcss.config.js
+│       ├── eslint.config.js
+│       ├── tsconfig.json
+│       ├── tsconfig.app.json
+│       ├── tsconfig.node.json
+│       ├── README.md
+│       │
+│       ├── public/
+│       │   ├── favicon.svg
+│       │   └── icons.svg
+│       │
+│       └── src/
+│           ├── main.tsx           # Entrée React
+│           ├── App.tsx            # Composant principal
+│           ├── App.css
+│           ├── index.css          # Styles globaux
+│           │
+│           ├── assets/            # Images & ressources
+│           │   ├── react.svg
+│           │   ├── vite.svg
+│           │   └── hero.png
+│           │
+│           ├── components/        # Composants réutilisables
+│           │   ├── Navbar.tsx
+│           │   ├── Sidebar.tsx
+│           │   └── NotificationBell.tsx
+│           │
+│           ├── hooks/            # Custom hooks
+│           │   └── useTheme.ts
+│           │
+│           ├── pages/            # Pages (16 pages)
+│           │   ├── LoginPage.tsx
+│           │   ├── AdminDashboard.tsx
+│           │   ├── AdminAnalyticsPage.tsx
+│           │   ├── AdminSupportPage.tsx
+│           │   ├── Adminuserspage.tsx
+│           │   ├── StudentDashboard.tsx
+│           │   ├── SupervisorDashboard.tsx
+│           │   ├── SupervisorDeadlinesPage.tsx
+│           │   ├── Supervisorstudentspage.tsx
+│           │   ├── Supervisorreportspage.tsx
+│           │   ├── ProfilePage.tsx
+│           │   ├── SettingsPage.tsx
+│           │   ├── MessagesPage.tsx
+│           │   ├── NotificationsPage.tsx
+│           │   ├── Supportpage.tsx
+│           │   └── Reportspage.tsx
+│           │
+│           ├── services/         # Services API & authentification
+│           │   ├── api.ts        # Instance Axios configurée
+│           │   └── authService.ts
+│           │
+│           └── store/            # État global (Zustand)
+│               └── authStore.ts
+│
+│
+└── student-internship-tracker/    # BACKEND - Spring Boot
+    ├── pom.xml                    # Maven config
+    ├── mvnw                       # Maven Wrapper (Linux/Mac)
+    ├── mvnw.cmd                   # Maven Wrapper (Windows)
+    ├── HELP.md
+    ├── .gitignore
+    ├── .gitattributes
+    ├── .mvn/                      # Configuration Maven
+    │   └── wrapper/
+    │
+    ├── src/
+    │   ├── main/
+    │   │   ├── java/com/internship/student_internship_tracker/
+    │   │   │   ├── StudentInternshipTrackerApplication.java  # Application Boot
+    │   │   │   ├── WebConfig.java                           # Config CORS, etc
+    │   │   │   ├── DataInitializer.java                     # Données initiales
+    │   │   │   │
+    │   │   │   ├── controller/                              # REST Controllers (10)
+    │   │   │   │   ├── AuthController.java
+    │   │   │   │   ├── UserController.java
+    │   │   │   │   ├── RapportController.java
+    │   │   │   │   ├── DeadlineController.java
+    │   │   │   │   ├── DemandeEncadrementController.java
+    │   │   │   │   ├── MessageController.java
+    │   │   │   │   ├── NotificationController.java
+    │   │   │   │   ├── CommentaireController.java
+    │   │   │   │   ├── SupportMessageController.java
+    │   │   │   │   └── PersonalEventController.java
+    │   │   │   │
+    │   │   │   ├── entity/                                  # Entités JPA (11)
+    │   │   │   │   ├── User.java
+    │   │   │   │   ├── Role.java                   # Enum rôles
+    │   │   │   │   ├── Rapport.java
+    │   │   │   │   ├── Deadline.java
+    │   │   │   │   ├── DemandeEncadrement.java
+    │   │   │   │   ├── StatutDemande.java
+    │   │   │   │   ├── Message.java
+    │   │   │   │   ├── Notification.java
+    │   │   │   │   ├── Commentaire.java
+    │   │   │   │   ├── SupportMessage.java
+    │   │   │   │   └── PersonalEvent.java
+    │   │   │   │
+    │   │   │   ├── repository/                               # Spring Data JPA (9)
+    │   │   │   │   ├── UserRepository.java
+    │   │   │   │   ├── RapportRepository.java
+    │   │   │   │   ├── DeadlineRepository.java
+    │   │   │   │   ├── DemandeEncadrementRepository.java
+    │   │   │   │   ├── MessageRepository.java
+    │   │   │   │   ├── NotificationRepository.java
+    │   │   │   │   ├── CommentaireRepository.java
+    │   │   │   │   ├── SupportMessageRepository.java
+    │   │   │   │   └── PersonalEventRepository.java
+    │   │   │   │
+    │   │   │   ├── service/                                  # Services métier (9)
+    │   │   │   │   ├── AuthService.java
+    │   │   │   │   ├── UserService.java
+    │   │   │   │   ├── RapportService.java
+    │   │   │   │   ├── DeadlineService.java
+    │   │   │   │   ├── DemandeEncadrementService.java
+    │   │   │   │   ├── MessageService.java
+    │   │   │   │   ├── NotificationService.java
+    │   │   │   │   ├── FileStorageService.java
+    │   │   │   │   ├── SupportMessageService.java
+    │   │   │   │   └── PersonalEventService.java
+    │   │   │   │
+    │   │   │   ├── security/                                # Sécurité JWT (3)
+    │   │   │   │   ├── JwtService.java
+    │   │   │   │   ├── JwtAuthFilter.java
+    │   │   │   │   └── SecurityConfig.java
+    │   │   │   │
+    │   │   │   └── graphql/                                 # Support GraphQL
+    │   │   │
+    │   │   └── resources/
+    │   │       ├── application.properties              # Config BD, port, etc
+    │   │       ├── application.properties.exemple
+    │   │       ├── graphql/
+    │   │       │   └── schema.graphqls
+    │   │       ├── static/
+    │   │       └── templates/
+    │   │
+    │   └── test/                                      # Tests
+    │       └── java/com/internship/student_internship_tracker/
+    │           └── StudentInternshipTrackerApplicationTests.java
+    │
+    ├── target/                                        # Build artifacts (compilés)
+    │   ├── classes/                  # Fichiers compilés
+    │   ├── generated-sources/        # Sources générées
+    │   ├── generated-test-sources/   # Sources test générées
+    │   ├── maven-status/             # Statut compilation
+    │   └── test-classes/
+    │
+    └── uploads/
+        └── rapports/                 # Fichiers uploadés
+
+
+================================================================================
+                              STATISTIQUES
+================================================================================
+
+FRONTEND (React + TypeScript + Vite):
+  • 16 Pages
+  • 3 Composants réutilisables
+  • 2 Services (API, Auth)
+  • 1 Store Zustand
+  • Dependencies: Axios, Lucide Icons, Tailwind CSS, Framer Motion, Recharts
+
+BACKEND (Spring Boot + Maven):
+  • 10 REST Controllers
+  • 11 Entités JPA
+  • 9 Repositories (Spring Data)
+  • 9 Services métier
+  • 3 Classes de sécurité JWT
+  • Support GraphQL
+  • BD: Application properties configurée
+
+OUTILS & FRAMEWORKS:
+  Frontend: React 18, TypeScript, Vite, Tailwind CSS, ESLint
+  Backend: Spring Boot, Maven, JPA/Hibernate, JWT, GraphQL
+
+================================================================================
+                              DESCRIPTION
+================================================================================
+
+FONCTIONNALITÉS PRINCIPALES:
+
+Admin:
+  - Dashboard avec statistiques
+  - Gestion des utilisateurs
+  - Gestion des rapports
+  - Support & messagerie
+  
+Encadrant (Supervisor):
+  - Dashboard avec étudiants assignés
+  - Gestion des deadlines
+  - Visualisation des rapports étudiants
+  
+Étudiant:
+  - Dashboard personnel
+  - Voir les deadlines de son encadrant
+  - Soumettre des rapports
+  - Demandes d'encadrement
+  - Notifications
+  
+Utilisateur:
+  - Profil personnel
+  - Événements personnels
+  - Messages
+  - Paramètres
+
+================================================================================

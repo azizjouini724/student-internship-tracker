@@ -2,6 +2,7 @@ package com.internship.student_internship_tracker.service;
 
 import com.internship.student_internship_tracker.entity.Deadline;
 import com.internship.student_internship_tracker.entity.Notification;
+import com.internship.student_internship_tracker.entity.NotificationType;
 import com.internship.student_internship_tracker.entity.PersonalEvent;
 import com.internship.student_internship_tracker.entity.User;
 import com.internship.student_internship_tracker.entity.Role;
@@ -43,7 +44,7 @@ public class DeadlineService {
         }
 
       
-        // ⭐ CONTRAINTE : 1 création par semaine par encadrant
+        // [*] CONTRAINTE : 1 création par semaine par encadrant
         if (encadrant != null) {
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime debutSemaine = now.with(DayOfWeek.MONDAY)
@@ -52,7 +53,7 @@ public class DeadlineService {
             List<Deadline> createdThisWeek = deadlineRepository
                     .findByEncadrantIdAndDateCreationAfter(encadrantId, debutSemaine);
 
-            // ⭐ DEBUG — Regarde ça dans le terminal Spring Boot
+            // [*] DEBUG — Regarde ça dans le terminal Spring Boot
             System.out.println("========== DEADLINE CREATION CHECK ==========");
             System.out.println("encadrantId = " + encadrantId);
             System.out.println("debutSemaine = " + debutSemaine);
@@ -60,7 +61,7 @@ public class DeadlineService {
             System.out.println("Deadlines creees cette semaine = " + createdThisWeek.size());
 
             if (!createdThisWeek.isEmpty()) {
-                System.out.println("BLOQUE ! Déjà " + createdThisWeek.size() + " deadline(s) cette semaine");
+                System.out.println("[!] BLOQUE ! Déjà " + createdThisWeek.size() + " deadline(s) cette semaine");
                 LocalDateTime finSemaine = debutSemaine.plusWeeks(1);
                 throw new IllegalArgumentException(
                     "Limite hebdomadaire atteinte : vous avez déjà créé une deadline cette semaine. "
@@ -68,7 +69,7 @@ public class DeadlineService {
                     + finSemaine.format(DateTimeFormatter.ofPattern("dd/MM/yyyy à HH:mm"))
                 );
             }
-            System.out.println("AUTORISE ! Aucune deadline cette semaine");
+            System.out.println("[+] AUTORISE ! Aucune deadline cette semaine");
             System.out.println("==============================================");
         }
 
@@ -98,7 +99,7 @@ public class DeadlineService {
                             .build();
                     notificationRepository.save(notif);
                 } catch (Exception e) {
-                    System.out.println("Erreur notification: " + e.getMessage());
+                    System.out.println("[!] Erreur notification: " + e.getMessage());
                 }
 
                 try {
@@ -110,7 +111,7 @@ public class DeadlineService {
                     event.setImportant(true);
                     personalEventRepository.save(event);
                 } catch (Exception e) {
-                    System.out.println("Erreur PersonalEvent: " + e.getMessage());
+                    System.out.println("[!] Erreur PersonalEvent: " + e.getMessage());
                 }
             }
         }
@@ -162,7 +163,7 @@ public class DeadlineService {
                             .build();
                     notificationRepository.save(notif);
                 } catch (Exception e) {
-                    System.out.println("Erreur notif update: " + e.getMessage());
+                    System.out.println("[!] Erreur notif update: " + e.getMessage());
                 }
 
                 try {
@@ -175,7 +176,7 @@ public class DeadlineService {
                         }
                     }
                 } catch (Exception e) {
-                    System.out.println("Erreur update event: " + e.getMessage());
+                    System.out.println("[!] Erreur update event: " + e.getMessage());
                 }
             }
         }
@@ -185,5 +186,76 @@ public class DeadlineService {
 
     public void deleteDeadline(Long id) {
         deadlineRepository.deleteById(id);
+    }
+
+    // [NEW] Vérifier les retards et notifier
+    /**
+     * Vérifie tous les deadlines dépassées et crée des notifications de retard
+     * Cette méthode est appelée par le Scheduler tous les jours a 8h00
+     */
+    public void checkRetardsAndNotify() {
+        System.out.println("[>>>] Vérification des retards de dépôt...");
+        
+        List<Deadline> allDeadlines = deadlineRepository.findAll();
+        LocalDate today = LocalDate.now();
+        int retardsDetectes = 0;
+        
+        for (Deadline deadline : allDeadlines) {
+            // [+] Vérifier si la deadline est dépassée
+            if (deadline.getDateLimite().isBefore(today)) {
+                System.out.println("[TIME] Retard détecté : " + deadline.getType() + " (échéance: " + deadline.getDateLimite() + ")");
+                
+                // Trouver tous les étudiants encadrés par cet encadrant
+                if (deadline.getEncadrant() != null) {
+                    List<User> etudiants = userRepository.findByEncadrantIdAndRole(
+                        deadline.getEncadrant().getId(), 
+                        Role.ETUDIANT
+                    );
+                    
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+                    String deadlineStr = deadline.getDateLimite().format(formatter);
+                    
+                    for (User etudiant : etudiants) {
+                        try {
+                            // Vérifier qu'une notification de retard n'existe pas déjà
+                            // (éviter les doublons)
+                            List<Notification> existantes = notificationRepository
+                                .findByUserAndTypeOrderByDateEnvoiDesc(
+                                    etudiant, 
+                                    NotificationType.RETARD_DEPOT
+                                );
+                            
+                            boolean dejaNotifie = existantes.stream()
+                                .anyMatch(n -> n.getMessage().contains(deadline.getType()));
+                            
+                            if (!dejaNotifie) {
+                                System.out.println("[MAIL] Notification envoyée a : " + etudiant.getNom());
+                                
+                                // Créer la notification de retard
+                                Notification notif = Notification.builder()
+                                        .titre("[TIME] Retard de dépôt détecté")
+                                        .message(String.format(
+                                            "Rapport '%s' était dû le %s. Veuillez le soumettre au plus tôt.",
+                                            deadline.getType(),
+                                            deadlineStr
+                                        ))
+                                        .estLue(false)
+                                        .dateEnvoi(LocalDateTime.now())
+                                        .type(NotificationType.RETARD_DEPOT)
+                                        .user(etudiant)
+                                        .build();
+                                
+                                notificationRepository.save(notif);
+                                retardsDetectes++;
+                            }
+                        } catch (Exception e) {
+                            System.out.println("[ERROR] Erreur notification retard: " + e.getMessage());
+                        }
+                    }
+                }
+            }
+        }
+        
+        System.out.println("[OK] Vérification terminée. " + retardsDetectes + " retard(s) détecté(s)");
     }
 }

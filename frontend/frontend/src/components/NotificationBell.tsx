@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, Check, CheckCheck, X, Info, Clock } from 'lucide-react'
+import { Bell, Check, CheckCheck, X, Info, Clock, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
-import api from '../services/api'
+import api, { notificationAPI } from '../services/api'
 
 // ─── Type ─────────────────────────────────────────────────────────────────────
 interface Notification {
@@ -12,6 +12,7 @@ interface Notification {
   estLue: boolean    // ← le vrai nom du champ
   createdAt?: string
   dateEnvoi?: string
+  type?: string      // [NEW] Type de notification (RETARD_DEPOT, etc)
 }
 
 interface NotificationBellProps {
@@ -21,6 +22,7 @@ interface NotificationBellProps {
 // ─── Composant ────────────────────────────────────────────────────────────────
 export default function NotificationBell({ isDark = false }: NotificationBellProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [retardsCount, setRetardsCount] = useState(0)  // [NEW] Compter les retards
   const [open, setOpen]                   = useState(false)
   const [loading, setLoading]             = useState(false)
   const dropdownRef                       = useRef<HTMLDivElement>(null)
@@ -48,9 +50,24 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
     }
   }
 
+  // [NEW] Fetch retards count
+  const fetchRetardsCount = async () => {
+    if (!userId) return
+    try {
+      const res = await notificationAPI.countRetards(userId)
+      setRetardsCount(res.data || 0)
+    } catch {
+      // silently fail
+    }
+  }
+
   useEffect(() => {
     fetchNotifications()
-    const interval = setInterval(fetchNotifications, 30000)
+    fetchRetardsCount()  // [NEW]
+    const interval = setInterval(() => {
+      fetchNotifications()
+      fetchRetardsCount()  // [NEW]
+    }, 30000)
     return () => clearInterval(interval)
   }, [userId])
 
@@ -65,14 +82,13 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // ✅ CORRIGÉ — Marquer une notif comme lue (vérifie que le backend répond OK)
+  // [FIXED] Marquer une notif comme lue
   const markAsRead = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation()
     try {
       await api.put(`/notifications/${id}/lire`)
-      // Met à jour SEULEMENT si le backend a répondu OK
       setNotifications(prev =>
-        prev.map(n => n.id === id ? { ...n, lu: true } : n)
+        prev.map(n => n.id === id ? { ...n, estLue: true } : n)
       )
     } catch (err: any) {
       if (err?.response?.status === 403) {
@@ -83,12 +99,11 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
     }
   }
 
-  // ✅ CORRIGÉ — Tout marquer comme lu (Promise.allSettled au lieu de .catch() caché)
+  // [FIXED] Tout marquer comme lu
   const markAllAsRead = async () => {
     const unread = notifications.filter(n => !n.estLue)
     if (unread.length === 0) return
     try {
-      // allSettled ne cache pas les erreurs — on sait exactement ce qui a réussi
       const results = await Promise.allSettled(
         unread.map(n => api.put(`/notifications/${n.id}/lire`))
       )
@@ -97,12 +112,11 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
       const failed  = results.filter(r => r.status === 'rejected')
 
       if (success.length > 0) {
-        // Mettre à jour seulement les IDs qui ont vraiment réussi
         const successIds = unread
           .filter((_, i) => results[i].status === 'fulfilled')
           .map(n => n.id)
         setNotifications(prev =>
-          prev.map(n => successIds.includes(n.id) ? { ...n, lu: true } : n)
+          prev.map(n => successIds.includes(n.id) ? { ...n, estLue: true } : n)
         )
       }
 
@@ -128,11 +142,19 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
     const hours = Math.floor(diff / 3600000)
     const days  = Math.floor(diff / 86400000)
 
-    if (mins < 1)   return 'À l\'instant'
+    if (mins < 1)   return 'A l\'instant'
     if (mins < 60)  return `Il y a ${mins} min`
     if (hours < 24) return `Il y a ${hours}h`
     if (days < 7)   return `Il y a ${days}j`
     return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  }
+
+  // [NEW] Retourner l'icône et couleur selon le type
+  const getNotificationIcon = (type?: string) => {
+    if (type === 'RETARD_DEPOT') {
+      return { icon: AlertCircle, color: 'text-orange-500', bg: 'bg-orange-100 dark:bg-orange-900/40' }
+    }
+    return { icon: Info, color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/40' }
   }
 
   // ── Styles ────────────────────────────────────────────────────────────────
@@ -142,6 +164,9 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
   const itemRead   = isDark ? 'border-l-gray-700' : 'border-l-gray-200'
   const textSub    = isDark ? 'text-gray-400' : 'text-gray-500'
   const textMain   = isDark ? 'text-gray-100' : 'text-gray-800'
+
+  // [NEW] Compter total badges (notifications non lues + retards)
+  const totalBadge = unreadCount + (retardsCount > 0 ? 1 : 0)
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -157,15 +182,15 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
         } ${open ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`}
       >
         <motion.div
-          animate={unreadCount > 0 ? { rotate: [0, -15, 15, -10, 10, 0] } : {}}
+          animate={totalBadge > 0 ? { rotate: [0, -15, 15, -10, 10, 0] } : {}}
           transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 4 }}
         >
           <Bell className="w-4 h-4" />
         </motion.div>
 
-        {/* Badge */}
+        {/* Badge général */}
         <AnimatePresence>
-          {unreadCount > 0 && (
+          {totalBadge > 0 && (
             <motion.span
               key="badge"
               initial={{ scale: 0 }}
@@ -173,7 +198,23 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
               exit={{ scale: 0 }}
               className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 shadow-md"
             >
-              {unreadCount > 9 ? '9+' : unreadCount}
+              {totalBadge > 9 ? '9+' : totalBadge}
+            </motion.span>
+          )}
+        </AnimatePresence>
+
+        {/* [NEW] Badge spécial retards (orange) */}
+        <AnimatePresence>
+          {retardsCount > 0 && (
+            <motion.span
+              key="retards-badge"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
+              className="absolute -bottom-1 -right-1 w-5 h-5 bg-orange-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-md animate-pulse border border-orange-600"
+              title={`${retardsCount} retard(s) de depot`}
+            >
+              [!]
             </motion.span>
           )}
         </AnimatePresence>
@@ -194,9 +235,9 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-blue-500" />
                 <span className="text-sm font-semibold">Notifications</span>
-                {unreadCount > 0 && (
+                {totalBadge > 0 && (
                   <span className="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded-full font-bold">
-                    {unreadCount}
+                    {totalBadge}
                   </span>
                 )}
               </div>
@@ -237,66 +278,69 @@ export default function NotificationBell({ isDark = false }: NotificationBellPro
                 <div className={`flex flex-col items-center justify-center py-10 ${textSub}`}>
                   <Bell className="w-8 h-8 mb-2 opacity-30" />
                   <p className="text-sm">Aucune notification</p>
-                  <p className="text-xs mt-1 opacity-70">Vous êtes à jour !</p>
+                  <p className="text-xs mt-1 opacity-70">Vous êtes a jour !</p>
                 </div>
 
               ) : (
-                notifications.slice(0, 10).map((notif, i) => (
-                  <motion.div
-                    key={notif.id}
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                    className={`flex items-start gap-3 px-4 py-3 border-l-4 border-b transition-colors cursor-default ${
-                      notif.estLue ? `${itemRead} ${itemHover}` : `${itemUnread} ${itemHover}`
-                    } ${isDark ? 'border-b-gray-800' : 'border-b-gray-50'}`}
-                  >
-                    {/* Icône */}
-                    <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
-                      notif.estLue
-                        ? isDark ? 'bg-gray-700' : 'bg-gray-100'
-                        : 'bg-blue-100 dark:bg-blue-900/40'
-                    }`}>
-                      <Info className={`w-3.5 h-3.5 ${notif.estLue ? textSub : 'text-blue-500'}`} />
-                    </div>
-
-                    {/* Contenu */}
-                    <div className="flex-1 min-w-0">
-                      {notif.titre && (
-                        <p className={`text-xs font-semibold mb-0.5 ${notif.estLue ? textSub : textMain}`}>
-                          {notif.titre}
-                        </p>
-                      )}
-                      <p className={`text-xs leading-relaxed ${notif.estLue ? textSub : textMain}`}>
-                        {notif.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <Clock className={`w-3 h-3 ${textSub}`} />
-                        <span className={`text-[10px] ${textSub}`}>
-                          {formatDate(notif.dateEnvoi ?? notif.createdAt)}
-                        </span>
-                        {!notif.estLue && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 ml-1 animate-pulse" />
-                        )}
+                notifications.slice(0, 10).map((notif, i) => {
+                  const { icon: IconComp, color, bg } = getNotificationIcon(notif.type)
+                  return (
+                    <motion.div
+                      key={notif.id}
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.03 }}
+                      className={`flex items-start gap-3 px-4 py-3 border-l-4 border-b transition-colors cursor-default ${
+                        notif.estLue ? `${itemRead} ${itemHover}` : `${itemUnread} ${itemHover}`
+                      } ${isDark ? 'border-b-gray-800' : 'border-b-gray-50'}`}
+                    >
+                      {/* Icône */}
+                      <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
+                        notif.estLue
+                          ? isDark ? 'bg-gray-700' : 'bg-gray-100'
+                          : bg
+                      }`}>
+                        <IconComp className={`w-3.5 h-3.5 ${notif.estLue ? textSub : color}`} />
                       </div>
-                    </div>
 
-                    {/* Bouton marquer lu */}
-                    {!notif.estLue && (
-                      <button
-                        onClick={(e) => markAsRead(notif.id, e)}
-                        className={`flex-shrink-0 p-1 rounded-lg transition-colors ${
-                          isDark
-                            ? 'hover:bg-gray-700 text-gray-400 hover:text-green-400'
-                            : 'hover:bg-green-50 text-gray-400 hover:text-green-600'
-                        }`}
-                        title="Marquer comme lu"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </motion.div>
-                ))
+                      {/* Contenu */}
+                      <div className="flex-1 min-w-0">
+                        {notif.titre && (
+                          <p className={`text-xs font-semibold mb-0.5 ${notif.estLue ? textSub : textMain}`}>
+                            {notif.titre}
+                          </p>
+                        )}
+                        <p className={`text-xs leading-relaxed ${notif.estLue ? textSub : textMain}`}>
+                          {notif.message}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <Clock className={`w-3 h-3 ${textSub}`} />
+                          <span className={`text-[10px] ${textSub}`}>
+                            {formatDate(notif.dateEnvoi ?? notif.createdAt)}
+                          </span>
+                          {!notif.estLue && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 ml-1 animate-pulse" />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Bouton marquer lu */}
+                      {!notif.estLue && (
+                        <button
+                          onClick={(e) => markAsRead(notif.id, e)}
+                          className={`flex-shrink-0 p-1 rounded-lg transition-colors ${
+                            isDark
+                              ? 'hover:bg-gray-700 text-gray-400 hover:text-green-400'
+                              : 'hover:bg-green-50 text-gray-400 hover:text-green-600'
+                          }`}
+                          title="Marquer comme lu"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </motion.div>
+                  )
+                })
               )}
             </div>
 

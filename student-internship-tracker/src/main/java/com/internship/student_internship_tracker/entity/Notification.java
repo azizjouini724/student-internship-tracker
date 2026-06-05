@@ -21,6 +21,8 @@ public class Notification {
     private String message;
     private boolean estLue;
     private LocalDateTime dateEnvoi;
+     @Enumerated(EnumType.STRING)
+    private NotificationType type;
     @JsonIgnore 
     @ManyToOne
     @JoinColumn(name = "user_id")

@@ -6,8 +6,10 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+@EnableScheduling
 @SpringBootApplication
 public class StudentInternshipTrackerApplication {
 
@@ -28,7 +30,7 @@ public class StudentInternshipTrackerApplication {
                 userRepo.findByEmail(email).ifPresent(user -> {
                     user.setMotDePasse(encoder.encode("123456"));
                     userRepo.save(user);
-                    System.out.println("✅ Reset : " + email + " → 123456");
+                    System.out.println("[+] Reset : " + email + " -> 123456");
                 });
             }
         };

@@ -15,17 +15,30 @@ api.interceptors.request.use((config) => {
 })
 
 // ── Gestion des erreurs d'authentification ────────────────────────────────
-// Dans api.ts, trouve cette partie :
 api.interceptors.response.use(
   response => response,
   error => {
-    // ❌ SUPPRIME ou COMMENTE ce bloc :
-    // if (error.response?.status === 401 || error.response?.status === 403) {
-    //   localStorage.clear()
-    //   window.location.href = '/login'
-    // }
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      localStorage.clear()
+      window.location.href = '/login'
+    }
     return Promise.reject(error)
   }
 )
+
+// [NEW] Endpoints supplémentaires pour les notifications de retard
+export const notificationAPI = {
+  // Récupérer notifications d'un type spécifique (ex: RETARD_DEPOT)
+  getByType: (userId: string, type: string) =>
+    api.get(`/notifications/user/${userId}/type/${type}`),
+  
+  // Compter les retards non lus
+  countRetards: (userId: string) =>
+    api.get(`/notifications/user/${userId}/retards/count`),
+  
+  // Récupérer TOUS les retards non lus (admin/stats)
+  getAllRetards: () =>
+    api.get(`/notifications/retards/non-lus`),
+}
 
 export default api
